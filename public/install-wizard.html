@@ -1,0 +1,621 @@
+<!DOCTYPE html>
+<html lang="bn" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cpanel1280 ⚡ Initial Setup Wizard</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&family=Hind+Siliguri:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        darkbg: '#070b14',
+                        cardbg: '#0d1527',
+                        cardborder: '#1e293b',
+                        accent: '#06b6d4',
+                    },
+                    fontFamily: {
+                        sans: ['"Plus Jakarta Sans"', '"Hind Siliguri"', 'sans-serif'],
+                        mono: ['"JetBrains Mono"', 'monospace']
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body {
+            background-color: #070b14;
+            background-image: 
+                radial-gradient(at 0% 0%, rgba(6, 182, 212, 0.12) 0px, transparent 50%),
+                radial-gradient(at 100% 100%, rgba(59, 130, 246, 0.1) 0px, transparent 50%),
+                radial-gradient(at 50% 50%, rgba(15, 23, 42, 0.5) 0px, transparent 100%);
+            min-height: 100vh;
+        }
+        .glass-panel {
+            background: rgba(13, 21, 39, 0.85);
+            backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+        }
+        .step-circle.active {
+            background: linear-gradient(135deg, #06b6d4, #2563eb);
+            color: white;
+            box-shadow: 0 0 20px rgba(6, 182, 212, 0.4);
+        }
+        .step-circle.completed {
+            background: #10b981;
+            color: white;
+        }
+    </style>
+</head>
+<body class="text-slate-200 font-sans antialiased p-4 md:p-8 flex flex-col justify-between">
+    <!-- Header -->
+    <header class="max-w-4xl mx-auto w-full mb-8">
+        <div class="flex items-center justify-between">
+            <div class="flex items-center gap-3">
+                <div class="w-11 h-11 rounded-2xl bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center text-white shadow-lg shadow-cyan-500/25">
+                    <i data-lucide="server" class="w-6 h-6"></i>
+                </div>
+                <div>
+                    <h1 class="text-xl font-bold text-white flex items-center gap-2">
+                        <span>Cpanel1280 Cloud Engine</span>
+                        <span class="text-[10px] uppercase font-mono px-2 py-0.5 rounded-full bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 font-bold">Auto-Pilot</span>
+                    </h1>
+                    <p class="text-xs text-slate-400">Zero-Touch VPS Web Hosting, Webmail & DNS Setup Wizard</p>
+                </div>
+            </div>
+            <div class="flex items-center gap-2">
+                <span class="text-xs text-slate-400 font-mono hidden sm:inline">Server IP:</span>
+                <span id="header-server-ip" class="px-3 py-1 rounded-xl bg-slate-900 border border-slate-800 font-mono text-xs text-cyan-300 font-bold">Detecting...</span>
+            </div>
+        </div>
+
+        <!-- Stepper -->
+        <div class="mt-8 relative flex items-center justify-between">
+            <div class="absolute left-0 top-1/2 -translate-y-1/2 h-1 bg-slate-800 w-full z-0"></div>
+            <div id="step-progress-bar" class="absolute left-0 top-1/2 -translate-y-1/2 h-1 bg-gradient-to-r from-cyan-500 to-blue-600 transition-all duration-300 z-0" style="width: 25%;"></div>
+
+            <div class="relative z-10 flex flex-col items-center">
+                <div id="step-node-1" class="step-circle active w-9 h-9 rounded-full flex items-center justify-center font-bold text-xs bg-slate-800 text-slate-400 border border-slate-700 transition">1</div>
+                <span class="text-[11px] font-medium mt-1.5 text-cyan-400">সিস্টেম হেলথ</span>
+            </div>
+            <div class="relative z-10 flex flex-col items-center">
+                <div id="step-node-2" class="step-circle w-9 h-9 rounded-full flex items-center justify-center font-bold text-xs bg-slate-800 text-slate-400 border border-slate-700 transition">2</div>
+                <span class="text-[11px] font-medium mt-1.5 text-slate-400">মাস্টার ডোমেন</span>
+            </div>
+            <div class="relative z-10 flex flex-col items-center">
+                <div id="step-node-3" class="step-circle w-9 h-9 rounded-full flex items-center justify-center font-bold text-xs bg-slate-800 text-slate-400 border border-slate-700 transition">3</div>
+                <span class="text-[11px] font-medium mt-1.5 text-slate-400">ডিএনএস ও মেইল</span>
+            </div>
+            <div class="relative z-10 flex flex-col items-center">
+                <div id="step-node-4" class="step-circle w-9 h-9 rounded-full flex items-center justify-center font-bold text-xs bg-slate-800 text-slate-400 border border-slate-700 transition">4</div>
+                <span class="text-[11px] font-medium mt-1.5 text-slate-400">অ্যাক্টিভেশন</span>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Container -->
+    <main class="max-w-4xl mx-auto w-full glass-panel rounded-3xl p-6 sm:p-10 shadow-2xl relative overflow-hidden">
+        <!-- Background decorative blobs -->
+        <div class="absolute top-0 right-0 -mr-20 -mt-20 w-64 h-64 bg-cyan-500/10 rounded-full blur-3xl pointer-events-none"></div>
+        <div class="absolute bottom-0 left-0 -ml-20 -mb-20 w-64 h-64 bg-blue-500/10 rounded-full blur-3xl pointer-events-none"></div>
+
+        <!-- ============================================================ -->
+        <!-- STEP 1: SYSTEM HEALTH & VERIFICATION                         -->
+        <!-- ============================================================ -->
+        <div id="step-content-1" class="space-y-6">
+            <div>
+                <h2 class="text-xl font-bold text-white flex items-center gap-2">
+                    <i data-lucide="shield-check" class="w-5 h-5 text-cyan-400"></i>
+                    <span>ভিপিএস সিস্টেম কম্পোনেন্ট ভেরিফিকেশন</span>
+                </h2>
+                <p class="text-xs text-slate-400 mt-1">Cpanel1280 ইনস্টলার আপনার ভিপিএস-এর ব্যাকএন্ড ডেমনসমূহ স্বয়ংক্রিয়ভাবে স্ক্যান করেছে:</p>
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                <div class="p-4 rounded-2xl bg-slate-900/80 border border-slate-800 flex items-center justify-between">
+                    <div class="flex items-center gap-3">
+                        <div class="w-9 h-9 rounded-xl bg-emerald-500/10 text-emerald-400 flex items-center justify-center font-bold">
+                            <i data-lucide="globe" class="w-5 h-5"></i>
+                        </div>
+                        <div>
+                            <div class="text-xs font-bold text-white">Nginx Web Server</div>
+                            <div class="text-[11px] text-slate-400">Reverse Proxy & SSL Router</div>
+                        </div>
+                    </div>
+                    <span id="health-nginx" class="px-2.5 py-1 rounded-lg text-xs font-mono font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">Active</span>
+                </div>
+
+                <div class="p-4 rounded-2xl bg-slate-900/80 border border-slate-800 flex items-center justify-between">
+                    <div class="flex items-center gap-3">
+                        <div class="w-9 h-9 rounded-xl bg-cyan-500/10 text-cyan-400 flex items-center justify-center font-bold">
+                            <i data-lucide="database" class="w-5 h-5"></i>
+                        </div>
+                        <div>
+                            <div class="text-xs font-bold text-white">MariaDB Database</div>
+                            <div class="text-[11px] text-slate-400">cpanel_system & MySQL Auth</div>
+                        </div>
+                    </div>
+                    <span id="health-mariadb" class="px-2.5 py-1 rounded-lg text-xs font-mono font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">Active</span>
+                </div>
+
+                <div class="p-4 rounded-2xl bg-slate-900/80 border border-slate-800 flex items-center justify-between">
+                    <div class="flex items-center gap-3">
+                        <div class="w-9 h-9 rounded-xl bg-blue-500/10 text-blue-400 flex items-center justify-center font-bold">
+                            <i data-lucide="send" class="w-5 h-5"></i>
+                        </div>
+                        <div>
+                            <div class="text-xs font-bold text-white">Postfix Mail Engine</div>
+                            <div class="text-[11px] text-slate-400">SMTP MTA (Port 25, 587, 465)</div>
+                        </div>
+                    </div>
+                    <span id="health-postfix" class="px-2.5 py-1 rounded-lg text-xs font-mono font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">Active</span>
+                </div>
+
+                <div class="p-4 rounded-2xl bg-slate-900/80 border border-slate-800 flex items-center justify-between">
+                    <div class="flex items-center gap-3">
+                        <div class="w-9 h-9 rounded-xl bg-purple-500/10 text-purple-400 flex items-center justify-center font-bold">
+                            <i data-lucide="inbox" class="w-5 h-5"></i>
+                        </div>
+                        <div>
+                            <div class="text-xs font-bold text-white">Dovecot Maildir Engine</div>
+                            <div class="text-[11px] text-slate-400">IMAP / POP3 (Port 993, 143)</div>
+                        </div>
+                    </div>
+                    <span id="health-dovecot" class="px-2.5 py-1 rounded-lg text-xs font-mono font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">Active</span>
+                </div>
+            </div>
+
+            <div class="p-4 rounded-2xl bg-gradient-to-r from-cyan-500/10 via-blue-500/10 to-indigo-500/10 border border-cyan-500/20 text-xs text-slate-300 flex items-start gap-3">
+                <i data-lucide="sparkles" class="w-5 h-5 text-cyan-400 shrink-0 mt-0.5"></i>
+                <div class="leading-relaxed">
+                    <strong>সব সার্ভিস প্রস্তুত!</strong> আপনার ভিপিএস সম্পূর্ণ কনফিগার হয়ে গেছে। এখন পরবর্তী ধাপে গিয়ে আপনার মাস্টার ডোমেইনটি বসিয়ে দিন।
+                </div>
+            </div>
+
+            <div class="flex justify-end pt-4 border-t border-slate-800">
+                <button onclick="goToStep(2)" class="px-6 py-2.5 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white font-bold text-xs shadow-lg shadow-cyan-500/20 transition flex items-center gap-2">
+                    <span>পরবর্তী ধাপ: মাস্টার ডোমেন কনফিগার</span>
+                    <i data-lucide="arrow-right" class="w-4 h-4"></i>
+                </button>
+            </div>
+        </div>
+
+        <!-- ============================================================ -->
+        <!-- STEP 2: MASTER DOMAIN & ADMIN CREDENTIALS                    -->
+        <!-- ============================================================ -->
+        <div id="step-content-2" class="space-y-6 hidden">
+            <div>
+                <h2 class="text-xl font-bold text-white flex items-center gap-2">
+                    <i data-lucide="layout-grid" class="w-5 h-5 text-cyan-400"></i>
+                    <span>মাস্টার ডোমেন ও অ্যাডমিন অ্যাকাউন্ট</span>
+                </h2>
+                <p class="text-xs text-slate-400 mt-1">এই ডোমেইনের অধীনে কন্ট্রোল প্যানেল এবং ডিফল্ট ওয়েবসাইট পরিচালিত হবে:</p>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+                <!-- Master Domain -->
+                <div class="md:col-span-2">
+                    <label class="block text-xs font-semibold text-slate-300 mb-1.5">মাস্টার ডোমেন নাম (Master Domain Name)</label>
+                    <div class="relative flex items-center">
+                        <span class="absolute left-3 text-slate-500 font-mono text-xs">https://</span>
+                        <input type="text" id="input-master-domain" placeholder="example.com অথবা hoster1280.shop" oninput="handleDomainInput(this.value)" class="w-full bg-slate-900 border border-slate-700 pl-16 pr-4 py-2.5 rounded-xl text-white font-mono text-xs focus:outline-none focus:border-cyan-500 transition">
+                    </div>
+                    <span class="text-[11px] text-slate-500 mt-1 block">যেমন: tamim1280.shop (কোনো http বা স্ল্যাশ ছাড়া লিখুন)</span>
+                </div>
+
+                <!-- Admin Username -->
+                <div>
+                    <label class="block text-xs font-semibold text-slate-300 mb-1.5">অ্যাডমিন ইউজারনেম (Admin Username)</label>
+                    <input type="text" id="input-admin-user" value="admin" class="w-full bg-slate-900 border border-slate-700 px-3.5 py-2.5 rounded-xl text-white font-mono text-xs focus:outline-none focus:border-cyan-500 transition">
+                </div>
+
+                <!-- Admin Email -->
+                <div>
+                    <label class="block text-xs font-semibold text-slate-300 mb-1.5">অ্যাডমিন ইমেইল (Admin Email)</label>
+                    <input type="email" id="input-admin-email" placeholder="admin@example.com" class="w-full bg-slate-900 border border-slate-700 px-3.5 py-2.5 rounded-xl text-white font-mono text-xs focus:outline-none focus:border-cyan-500 transition">
+                </div>
+
+                <!-- Admin Password -->
+                <div class="md:col-span-2">
+                    <div class="flex items-center justify-between mb-1.5">
+                        <label class="block text-xs font-semibold text-slate-300">অ্যাডমিন পাসওয়ার্ড (Admin Password)</label>
+                        <button type="button" onclick="generateAdminPassword()" class="text-[11px] text-cyan-400 hover:text-cyan-300 font-medium flex items-center gap-1">
+                            <i data-lucide="sparkles" class="w-3 h-3"></i>
+                            <span>পাসওয়ার্ড জেনারেট করুন</span>
+                        </button>
+                    </div>
+                    <div class="relative flex items-center">
+                        <input type="password" id="input-admin-pass" placeholder="শক্তিশালী পাসওয়ার্ড লিখুন" class="w-full bg-slate-900 border border-slate-700 pl-3.5 pr-12 py-2.5 rounded-xl text-white font-mono text-xs focus:outline-none focus:border-cyan-500 transition">
+                        <button type="button" onclick="togglePassVisibility('input-admin-pass', this)" class="absolute right-3 text-slate-400 hover:text-white">
+                            <i data-lucide="eye" class="w-4 h-4"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="flex items-center justify-between pt-4 border-t border-slate-800">
+                <button onclick="goToStep(1)" class="px-5 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold transition">
+                    পূর্ববর্তী ধাপ
+                </button>
+                <button onclick="validateStep2AndProceed()" class="px-6 py-2.5 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white font-bold text-xs shadow-lg shadow-cyan-500/20 transition flex items-center gap-2">
+                    <span>পরবর্তী ধাপ: ডিএনএস মেথড নির্বাচন</span>
+                    <i data-lucide="arrow-right" class="w-4 h-4"></i>
+                </button>
+            </div>
+        </div>
+
+        <!-- ============================================================ -->
+        <!-- STEP 3: DNS ROUTING & EMAIL DELIVERABILITY METHOD             -->
+        <!-- ============================================================ -->
+        <div id="step-content-3" class="space-y-6 hidden">
+            <div>
+                <h2 class="text-xl font-bold text-white flex items-center gap-2">
+                    <i data-lucide="radio" class="w-5 h-5 text-cyan-400"></i>
+                    <span>ডিএনএস ও ৫টি পার্মানেন্ট ইমেইল রেকর্ড সেটআপ</span>
+                </h2>
+                <p class="text-xs text-slate-400 mt-1">আপনার ডোমেনটি ক্লাউডফ্লেয়ারের মাধ্যমে স্বয়ংক্রিয়ভাবে সিঙ্ক করবেন নাকি ম্যানুয়ালি ডিএনএস বসাবেন?</p>
+            </div>
+
+            <!-- Provider Selection Grid -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <!-- Option 1: Cloudflare Auto-Pilot -->
+                <div id="opt-cf" onclick="selectDnsOption('cloudflare')" class="p-5 rounded-2xl bg-slate-900/90 border-2 border-cyan-500 cursor-pointer transition relative">
+                    <div class="absolute top-4 right-4 text-cyan-400">
+                        <i data-lucide="check-circle-2" class="w-5 h-5"></i>
+                    </div>
+                    <div class="flex items-center gap-3 mb-2">
+                        <div class="w-10 h-10 rounded-xl bg-amber-500/10 text-amber-400 flex items-center justify-center font-bold">
+                            <i data-lucide="cloud" class="w-5 h-5"></i>
+                        </div>
+                        <div>
+                            <div class="text-sm font-bold text-white">Cloudflare Auto-Pilot</div>
+                            <div class="text-[11px] text-cyan-400 font-semibold">১-ক্লিকে ১০০% অটোমেশন (Recommended)</div>
+                        </div>
+                    </div>
+                    <p class="text-xs text-slate-400 leading-relaxed">
+                        API টোকেন দিলে আপনার ক্লাউডফ্লেয়ার একাউন্টে প্যানেলের A রেকর্ড, CNAME এবং <strong>৫টি পার্মানেন্ট ইমেইল রেকর্ড (MX, mail A, SPF, DKIM, DMARC)</strong> নিজে থেকেই সেট হয়ে যাবে।
+                    </p>
+                </div>
+
+                <!-- Option 2: Manual DNS / Nameservers -->
+                <div id="opt-manual" onclick="selectDnsOption('manual')" class="p-5 rounded-2xl bg-slate-900/50 border-2 border-slate-800 hover:border-slate-700 cursor-pointer transition relative">
+                    <div class="flex items-center gap-3 mb-2">
+                        <div class="w-10 h-10 rounded-xl bg-blue-500/10 text-blue-400 flex items-center justify-center font-bold">
+                            <i data-lucide="list-plus" class="w-5 h-5"></i>
+                        </div>
+                        <div>
+                            <div class="text-sm font-bold text-white">Manual DNS / Nameservers</div>
+                            <div class="text-[11px] text-slate-400">কাস্টম কপি-পেস্ট রেকর্ড</div>
+                        </div>
+                    </div>
+                    <p class="text-xs text-slate-400 leading-relaxed">
+                        আপনি যেকোনো ডোমেন রেজিস্টার (যেমন Namecheap, GoDaddy) বা নিজস্ব ডিএনএস ম্যানেজারে এই সার্ভারের ৭টি ডিএনএস রেকর্ড ১-ক্লিকে কপি করে বসাতে পারবেন।
+                    </p>
+                </div>
+            </div>
+
+            <!-- Cloudflare Token Input (Shown if option 1 active) -->
+            <div id="cf-input-box" class="p-5 rounded-2xl bg-slate-900/80 border border-slate-800 space-y-4">
+                <div class="flex items-center justify-between">
+                    <label class="block text-xs font-semibold text-slate-200">Cloudflare API Token (Edit zone DNS পারমিশন সহ)</label>
+                    <a href="https://dash.cloudflare.com/profile/api-tokens" target="_blank" class="text-[11px] text-cyan-400 hover:underline flex items-center gap-1">
+                        <span>Get Token from Cloudflare</span>
+                        <i data-lucide="external-link" class="w-3 h-3"></i>
+                    </a>
+                </div>
+                <input type="password" id="input-cf-token" placeholder="যেমন: XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX" class="w-full bg-slate-950 border border-slate-700 px-3.5 py-2.5 rounded-xl text-white font-mono text-xs focus:outline-none focus:border-cyan-500 transition">
+                <p class="text-[11px] text-slate-500 leading-relaxed">
+                    💡 ক্লাউডফ্লেয়ার ড্যাশবোর্ডে গিয়ে <strong>"Edit zone DNS"</strong> টেমপ্লেটের মাধ্যমে একটি টোকেন তৈরি করুন। সার্ভার স্বয়ংক্রিয়ভাবে Zone ID শনাক্ত করে রেকর্ড তৈরি করবে।
+                </p>
+            </div>
+
+            <!-- Manual DNS Preview Box (Shown if option 2 active) -->
+            <div id="manual-dns-box" class="p-5 rounded-2xl bg-slate-900/80 border border-slate-800 space-y-3 hidden">
+                <div class="flex items-center justify-between">
+                    <span class="text-xs font-bold text-white flex items-center gap-2">
+                        <i data-lucide="key" class="w-4 h-4 text-cyan-400"></i>
+                        <span>৭টি ডিএনএস রেকর্ড প্রিভিউ (2048-bit RSA DKIM সহ):</span>
+                    </span>
+                    <span class="text-[10px] text-slate-400 font-mono">Setup সম্পন্ন হলে এগুলো প্যানেলেও দেখতে পাবেন</span>
+                </div>
+                <div id="dns-preview-list" class="space-y-2 text-xs font-mono">
+                    <!-- Populated dynamically -->
+                </div>
+            </div>
+
+            <div class="flex items-center justify-between pt-4 border-t border-slate-800">
+                <button onclick="goToStep(2)" class="px-5 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold transition">
+                    পূর্ববর্তী ধাপ
+                </button>
+                <button onclick="startSetupExecution()" id="btn-start-setup" class="px-7 py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-white font-bold text-xs shadow-lg shadow-emerald-500/20 transition flex items-center gap-2">
+                    <i data-lucide="rocket" class="w-4 h-4"></i>
+                    <span>ইনস্টলেশন শুরু করুন (Complete Setup)</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- ============================================================ -->
+        <!-- STEP 4: PROGRESS & FINAL LAUNCH                              -->
+        <!-- ============================================================ -->
+        <div id="step-content-4" class="space-y-6 hidden text-center py-6">
+            <!-- Loader State -->
+            <div id="setup-loading-state" class="space-y-4">
+                <div class="w-16 h-16 border-4 border-cyan-500 border-t-transparent rounded-full animate-spin mx-auto"></div>
+                <h3 class="text-lg font-bold text-white">কনফিগারেশন ও ক্লাউড সিঙ্ক চলছে...</h3>
+                <p id="setup-progress-status" class="text-xs text-slate-400 font-mono">Creating MariaDB isolated accounts and vhost...</p>
+                <div class="max-w-md mx-auto h-2 bg-slate-800 rounded-full overflow-hidden">
+                    <div id="setup-progress-bar-inner" class="h-full bg-gradient-to-r from-cyan-500 to-blue-500 w-1/4 transition-all duration-500"></div>
+                </div>
+            </div>
+
+            <!-- Success State -->
+            <div id="setup-success-state" class="space-y-6 hidden">
+                <div class="w-16 h-16 rounded-3xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 flex items-center justify-center mx-auto text-2xl font-bold shadow-xl shadow-emerald-500/10">
+                    <i data-lucide="check" class="w-8 h-8 text-emerald-400"></i>
+                </div>
+                <div>
+                    <h3 class="text-xl font-bold text-white">🎉 অভিনন্দন! Cpanel1280 সম্পূর্ণ সক্রিয় হয়েছে!</h3>
+                    <p class="text-xs text-slate-400 mt-1">আপনার মাস্টার ডোমেইন, ফাইল ম্যানেজার, ডাটাবেজ এবং ইন-হাউস ওয়েবমেইল এখন প্রস্তুত।</p>
+                </div>
+
+                <div class="max-w-md mx-auto p-4 rounded-2xl bg-slate-900 border border-slate-800 text-left space-y-2 font-mono text-xs">
+                    <div class="flex justify-between pb-2 border-b border-slate-800">
+                        <span class="text-slate-500">Master Domain:</span>
+                        <span id="res-domain" class="text-white font-bold">domain.com</span>
+                    </div>
+                    <div class="flex justify-between pb-2 border-b border-slate-800">
+                        <span class="text-slate-500">Control Panel URL:</span>
+                        <span id="res-panel-url" class="text-cyan-400 font-bold">https://domain.com/tpanel</span>
+                    </div>
+                    <div class="flex justify-between pb-2 border-b border-slate-800">
+                        <span class="text-slate-500">Admin Email:</span>
+                        <span id="res-email" class="text-slate-300">admin@domain.com</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-slate-500">Email Engine:</span>
+                        <span class="text-emerald-400 font-bold">Postfix + Dovecot Active</span>
+                    </div>
+                </div>
+
+                <div class="pt-2">
+                    <button onclick="launchControlPanel()" class="px-8 py-3 rounded-2xl bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white font-bold text-sm shadow-xl shadow-cyan-500/25 transition inline-flex items-center gap-2">
+                        <span>কন্ট্রোল প্যানেলে প্রবেশ করুন (Enter Control Panel)</span>
+                        <i data-lucide="arrow-right" class="w-4 h-4"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Footer -->
+    <footer class="max-w-4xl mx-auto w-full text-center mt-8 text-slate-500 text-xs font-mono">
+        Cpanel1280 Cloud Engine v1.0.0 • Open Source Web Hosting Platform & Autonomous Mail Stack
+    </footer>
+
+    <!-- Wizard Scripts -->
+    <script>
+        let currentStep = 1;
+        let selectedDns = 'cloudflare';
+        let serverIp = '127.0.0.1';
+        let setupResult = null;
+
+        // Initialize on load
+        window.addEventListener('DOMContentLoaded', async () => {
+            lucide.createIcons();
+            await fetchStatus();
+        });
+
+        async function fetchStatus() {
+            try {
+                const res = await fetch('/api/installer/status');
+                const data = await res.json();
+                if (data.serverIp) {
+                    serverIp = data.serverIp;
+                    document.getElementById('header-server-ip').textContent = serverIp;
+                }
+                if (data.health) {
+                    document.getElementById('health-nginx').textContent = data.health.nginx ? 'Active' : 'Standby';
+                    document.getElementById('health-mariadb').textContent = data.health.mariadb ? 'Active' : 'Standby';
+                    document.getElementById('health-postfix').textContent = data.health.postfix ? 'Active' : 'Standby';
+                    document.getElementById('health-dovecot').textContent = data.health.dovecot ? 'Active' : 'Standby';
+                }
+                if (data.installed && data.masterDomain) {
+                    // Already installed, redirect to panel or prompt
+                    document.getElementById('input-master-domain').value = data.masterDomain;
+                }
+            } catch (e) {
+                console.warn('Status fetch error:', e);
+            }
+        }
+
+        function goToStep(step) {
+            currentStep = step;
+            for (let i = 1; i <= 4; i++) {
+                const el = document.getElementById(`step-content-${i}`);
+                const node = document.getElementById(`step-node-${i}`);
+                if (el) el.classList.toggle('hidden', i !== step);
+                if (node) {
+                    node.classList.remove('active', 'completed');
+                    if (i === step) node.classList.add('active');
+                    else if (i < step) node.classList.add('completed');
+                }
+            }
+            const bar = document.getElementById('step-progress-bar');
+            if (bar) {
+                bar.style.width = `${step * 25}%`;
+            }
+            lucide.createIcons();
+        }
+
+        function handleDomainInput(val) {
+            const clean = val.toLowerCase().trim().replace(/^https?:\/\//, '').replace(/\/.*$/, '');
+            const emailInput = document.getElementById('input-admin-email');
+            if (emailInput && (!emailInput.value || emailInput.value.startsWith('admin@'))) {
+                emailInput.value = clean ? `admin@${clean}` : '';
+            }
+        }
+
+        function generateAdminPassword() {
+            const chars = 'abcdefghjkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789!@#$%&*';
+            let pass = '';
+            for (let i = 0; i < 16; i++) {
+                pass += chars.charAt(Math.floor(Math.random() * chars.length));
+            }
+            const el = document.getElementById('input-admin-pass');
+            if (el) {
+                el.value = pass;
+                el.type = 'text';
+            }
+        }
+
+        function togglePassVisibility(id, btn) {
+            const el = document.getElementById(id);
+            if (!el) return;
+            el.type = el.type === 'password' ? 'text' : 'password';
+        }
+
+        function validateStep2AndProceed() {
+            const domain = document.getElementById('input-master-domain').value.trim();
+            const pass = document.getElementById('input-admin-pass').value.trim();
+            if (!domain) {
+                alert('অনুগ্রহ করে আপনার মাস্টার ডোমেইন নামটি লিখুন (যেমন: yourdomain.com)');
+                return;
+            }
+            if (!pass || pass.length < 6) {
+                alert('অনুগ্রহ করে কমপক্ষে ৬ অক্ষরের অ্যাডমিন পাসওয়ার্ড দিন বা জেনারেট করুন।');
+                return;
+            }
+            goToStep(3);
+            loadDnsPreview(domain);
+        }
+
+        function selectDnsOption(opt) {
+            selectedDns = opt;
+            const optCf = document.getElementById('opt-cf');
+            const optMan = document.getElementById('opt-manual');
+            const cfBox = document.getElementById('cf-input-box');
+            const manBox = document.getElementById('manual-dns-box');
+
+            if (opt === 'cloudflare') {
+                optCf.classList.add('border-cyan-500');
+                optCf.classList.remove('border-slate-800');
+                optMan.classList.remove('border-cyan-500');
+                optMan.classList.add('border-slate-800');
+                cfBox.classList.remove('hidden');
+                manBox.classList.add('hidden');
+            } else {
+                optMan.classList.add('border-cyan-500');
+                optMan.classList.remove('border-slate-800');
+                optCf.classList.remove('border-cyan-500');
+                optCf.classList.add('border-slate-800');
+                cfBox.classList.add('hidden');
+                manBox.classList.remove('hidden');
+            }
+            lucide.createIcons();
+        }
+
+        async function loadDnsPreview(domain) {
+            try {
+                const res = await fetch(`/api/installer/dns-records?domain=${domain}`);
+                const data = await res.json();
+                const list = document.getElementById('dns-preview-list');
+                if (data.dnsRecords && list) {
+                    list.innerHTML = data.dnsRecords.map(r => `
+                        <div class="p-2.5 rounded-xl bg-slate-950 border border-slate-800 flex items-center justify-between gap-2">
+                            <div class="flex items-center gap-2 overflow-hidden">
+                                <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-cyan-500/10 text-cyan-300 border border-cyan-500/20 shrink-0">${r.type}</span>
+                                <span class="text-white shrink-0">${r.name}</span>
+                                <span class="text-slate-500 truncate max-w-xs font-mono text-[11px]">${r.content}</span>
+                            </div>
+                            <button type="button" onclick="navigator.clipboard.writeText('${r.content}'); alert('কপি হয়েছে: ${r.type} ${r.name}');" class="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded text-[10px] shrink-0">Copy</button>
+                        </div>
+                    `).join('');
+                }
+            } catch (e) {}
+        }
+
+        async function startSetupExecution() {
+            const domain = document.getElementById('input-master-domain').value.trim();
+            const adminUser = document.getElementById('input-admin-user').value.trim() || 'admin';
+            const adminEmail = document.getElementById('input-admin-email').value.trim() || `admin@${domain}`;
+            const adminPass = document.getElementById('input-admin-pass').value.trim();
+            const cfToken = document.getElementById('input-cf-token').value.trim();
+
+            if (selectedDns === 'cloudflare' && !cfToken) {
+                alert('Cloudflare API Token প্রদান করুন অথবা Manual DNS অপশনটি নির্বাচন করুন।');
+                return;
+            }
+
+            goToStep(4);
+            const statusText = document.getElementById('setup-progress-status');
+            const pBar = document.getElementById('setup-progress-bar-inner');
+
+            statusText.textContent = 'ডাটাবেজ টেবিল ও বিচ্ছিন্ন অ্যাকাউন্ট তৈরি হচ্ছে...';
+            pBar.style.width = '35%';
+
+            try {
+                const res = await fetch('/api/installer/setup-master-domain', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        masterDomain: domain,
+                        adminUsername: adminUser,
+                        adminEmail: adminEmail,
+                        adminPassword: adminPass,
+                        dnsProvider: selectedDns,
+                        cloudflareToken: cfToken
+                    })
+                });
+
+                pBar.style.width = '75%';
+                statusText.textContent = '2048-bit DKIM কি ও Nginx ভার্চুয়াল হোস্ট অ্যাক্টিভেট হচ্ছে...';
+
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.error || 'Setup failed');
+
+                setupResult = data;
+
+                // Save token to localStorage for seamless single sign-on
+                if (data.token) {
+                    localStorage.setItem('cpanel_token', data.token);
+                    localStorage.setItem('cpanel_user', JSON.stringify({
+                        username: adminUser,
+                        email: adminEmail,
+                        role: 'admin'
+                    }));
+                }
+
+                pBar.style.width = '100%';
+                statusText.textContent = 'সম্পন্ন হয়েছে!';
+
+                setTimeout(() => {
+                    document.getElementById('setup-loading-state').classList.add('hidden');
+                    document.getElementById('setup-success-state').classList.remove('hidden');
+                    document.getElementById('res-domain').textContent = data.masterDomain;
+                    document.getElementById('res-panel-url').textContent = `https://${data.masterDomain}/tpanel`;
+                    document.getElementById('res-email').textContent = adminEmail;
+                    lucide.createIcons();
+                }, 800);
+
+            } catch (err) {
+                alert('ত্রুটি: ' + err.message);
+                goToStep(3);
+            }
+        }
+
+        function launchControlPanel() {
+            if (setupResult && setupResult.masterDomain) {
+                window.location.href = `https://${setupResult.masterDomain}/tpanel`;
+            } else {
+                window.location.href = '/tpanel';
+            }
+        }
+    </script>
+</body>
+</html>

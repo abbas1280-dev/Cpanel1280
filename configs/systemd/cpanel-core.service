@@ -1,0 +1,16 @@
+[Unit]
+Description=Cpanel1280 Core Control Panel & Mail Engine
+After=network.target mariadb.service postfix.service dovecot.service
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/cpanel-core
+ExecStart=/usr/bin/node /opt/cpanel-core/server.js
+Restart=always
+RestartSec=5
+Environment=NODE_ENV=production
+Environment=PORT=3000
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,5 @@
+user = root
+password = 
+hosts = 127.0.0.1
+dbname = cpanel_system
+query = SELECT 1 FROM services WHERE domain='%s' LIMIT 1

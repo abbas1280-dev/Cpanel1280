@@ -1,0 +1,5 @@
+user = root
+password = 
+hosts = 127.0.0.1
+dbname = cpanel_system
+query = SELECT destination FROM virtual_aliases WHERE source='%s'

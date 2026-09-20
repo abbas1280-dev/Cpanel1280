@@ -1,0 +1,5 @@
+user = root
+password = 
+hosts = 127.0.0.1
+dbname = cpanel_system
+query = SELECT 1 FROM email_accounts WHERE full_email='%s' LIMIT 1

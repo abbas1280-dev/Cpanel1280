@@ -1,0 +1,18 @@
+# ====================================================================
+# CPANEL1280 DOVECOT SQL AUTHENTICATION (dovecot-sql.conf.ext)
+# ====================================================================
+
+driver = mysql
+connect = host=127.0.0.1 dbname=cpanel_system user=root password=
+
+default_pass_scheme = BLF-CRYPT
+
+password_query = SELECT full_email AS user, password_hash AS password \
+  FROM email_accounts WHERE full_email = '%u'
+
+user_query = SELECT 5000 AS uid, 5000 AS gid, \
+  CONCAT('/var/vmail/', SUBSTRING_INDEX('%u', '@', -1), '/', SUBSTRING_INDEX('%u', '@', 1)) AS home, \
+  'maildir:storage=1024000' AS quota_rule \
+  FROM email_accounts WHERE full_email = '%u'
+
+iterate_query = SELECT full_email AS user FROM email_accounts
