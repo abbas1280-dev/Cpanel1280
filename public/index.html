@@ -7949,7 +7949,8 @@
 
         function downloadBackup(filename) {
             if (!selectedService) return;
-            const url = `/api/cpanel/backup/download?serviceId=${selectedService.id}&filename=${encodeURIComponent(filename)}`;
+            const currentToken = localStorage.getItem('token') || (typeof token !== 'undefined' ? token : '');
+            const url = `/api/cpanel/backup/download?serviceId=${selectedService.id}&filename=${encodeURIComponent(filename)}&token=${encodeURIComponent(currentToken)}`;
             const a = document.createElement('a');
             a.href = url;
             a.download = filename;
