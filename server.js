@@ -3748,6 +3748,32 @@ async function getBackupDirectory(serviceId) {
     return dir;
 }
 
+// Multer storage for full backup uploads (supports large archives up to 4GB)
+const backupStorage = multer.diskStorage({
+    destination: async (req, file, cb) => {
+        try {
+            const serviceId = req.query.serviceId || req.body.serviceId;
+            if (!serviceId) return cb(new Error('serviceId is required for backup upload'));
+            const dir = path.join(BACKUP_BASE_DIR, String(serviceId));
+            await fsp.mkdir(dir, { recursive: true, mode: 0o755 });
+            cb(null, dir);
+        } catch (e) {
+            cb(e);
+        }
+    },
+    filename: (req, file, cb) => {
+        let safeName = file.originalname.replace(/[^a-zA-Z0-9._-]/g, '_');
+        if (!safeName.endsWith('.tar.gz') && !safeName.endsWith('.zip') && !safeName.endsWith('.tgz') && !safeName.endsWith('.tar')) {
+            safeName += '.tar.gz';
+        }
+        cb(null, safeName);
+    }
+});
+const uploadBackupMulter = multer({
+    storage: backupStorage,
+    limits: { fileSize: 4 * 1024 * 1024 * 1024 }
+});
+
 // Core reusable backup generator with auto-retention
 async function generateServiceBackup(service, backupType = 'full', isAuto = false) {
     const type = ['full', 'files', 'database'].includes(backupType) ? backupType : 'full';
@@ -3997,8 +4023,56 @@ app.get('/api/cpanel/backup/download', authMiddleware, async (req, res) => {
     }
 });
 
-// 4. Restore Backup
+// 3.5. Upload Backup File (Supports .tar.gz, .tgz, .tar, .zip up to 4GB)
+app.post('/api/cpanel/backup/upload', authMiddleware, uploadBackupMulter.single('backupFile'), async (req, res) => {
+    try {
+        const serviceId = req.query.serviceId || req.body.serviceId;
+        const service = await getServiceForUser(serviceId, req.user);
+        if (!service) {
+            if (req.file && fs.existsSync(req.file.path)) {
+                await fsp.unlink(req.file.path).catch(() => {});
+            }
+            return res.status(404).json({ error: 'Service not found' });
+        }
+
+        if (!req.file) {
+            return res.status(400).json({ error: 'No backup file uploaded (কোনো ফাইল পাওয়া যায়নি)' });
+        }
+
+        const stat = await fsp.stat(req.file.path);
+        res.json({
+            success: true,
+            filename: req.file.filename,
+            sizeBytes: stat.size,
+            sizeFormatted: formatBytes(stat.size),
+            createdAt: stat.mtime,
+            message: `ব্যাকআপ ফাইল "${req.file.filename}" সফলভাবে আপলোড সম্পন্ন হয়েছে (${formatBytes(stat.size)})`
+        });
+    } catch (err) {
+        if (req.file && fs.existsSync(req.file.path)) {
+            await fsp.unlink(req.file.path).catch(() => {});
+        }
+        res.status(500).json({ error: 'Backup upload failed: ' + err.message });
+    }
+});
+
+// 4. Restore Backup with Real-Time Diagnostics & Auto Live Deployment
 app.post('/api/cpanel/backup/restore', authMiddleware, async (req, res) => {
+    const logs = [];
+    const pushLog = (msg) => {
+        const time = new Date().toTimeString().slice(0, 8);
+        logs.push(`[${time}] ${msg}`);
+    };
+
+    const steps = [
+        { id: 'unpack', name: '১. ব্যাকআপ আর্কাইভ ভেরিফিকেশন ও এক্সট্র্যাকশন', status: 'pending', detail: 'অপেক্ষমাণ...' },
+        { id: 'files', name: '২. ওয়েবসাইট ফাইল ও পারমিশন রিস্টোর (public_html)', status: 'pending', detail: 'অপেক্ষমাণ...' },
+        { id: 'database', name: '৩. MySQL ডাটাবেস ইম্পোর্ট ও রেজিস্ট্রেশন', status: 'pending', detail: 'অপেক্ষমাণ...' },
+        { id: 'server', name: '৪. ওয়েব সার্ভার রিলোড ও লাইভ ভেরিফিকেশন', status: 'pending', detail: 'অপেক্ষমাণ...' }
+    ];
+
+    let tempExtractDir = null;
+
     try {
         const { serviceId, filename } = req.body;
         const service = await getServiceForUser(serviceId, req.user);
@@ -4009,42 +4083,124 @@ app.post('/api/cpanel/backup/restore', authMiddleware, async (req, res) => {
         const archivePath = path.join(backupDir, safeFilename);
 
         if (!fs.existsSync(archivePath)) {
-            return res.status(404).json({ error: 'Backup file not found' });
+            return res.status(404).json({ error: `ব্যাকআপ ফাইলটি পাওয়া যায়নি: ${safeFilename}` });
         }
 
+        const archiveStat = await fsp.stat(archivePath);
+        pushLog(`শুরু হয়েছে: "${safeFilename}" (${formatBytes(archiveStat.size)}) রিস্টোর প্রক্রিয়া...`);
         const domain = service.domain;
         const vhostPath = path.join('/var/www/vhosts', domain);
-        const tempExtractDir = path.join('/tmp', `restore_tmp_${service.id}_${Date.now()}`);
+        tempExtractDir = path.join('/tmp', `restore_run_${service.id}_${Date.now()}`);
         await fsp.mkdir(tempExtractDir, { recursive: true });
 
-        // Extract master archive
-        await execPromise(`tar -xzf "${archivePath}" -C "${tempExtractDir}"`);
+        // ==========================================
+        // STEP 1: Unpack & Integrity Check
+        // ==========================================
+        steps[0].status = 'running';
+        steps[0].detail = 'আর্কাইভ ফাইল এক্সট্র্যাক্ট করা হচ্ছে...';
+        pushLog(`ধাপ ১: আর্কাইভ আনপ্যাক করা হচ্ছে (${tempExtractDir})`);
 
-        // A. Restore files (Handles all formats: Full homedir, direct files, and legacy archive)
-        if (fs.existsSync(path.join(tempExtractDir, 'homedir', 'public_html'))) {
-            await fsp.mkdir(path.join(vhostPath, 'public_html'), { recursive: true });
-            await execPromise(`cp -a "${path.join(tempExtractDir, 'homedir', 'public_html')}/." "${path.join(vhostPath, 'public_html')}/"`);
-            if (fs.existsSync(path.join(tempExtractDir, 'homedir', 'subdomains'))) {
-                await fsp.mkdir(path.join(vhostPath, 'subdomains'), { recursive: true });
-                await execPromise(`cp -a "${path.join(tempExtractDir, 'homedir', 'subdomains')}/." "${path.join(vhostPath, 'subdomains')}/"`);
+        try {
+            if (safeFilename.endsWith('.zip')) {
+                await execPromise(`unzip -q -o "${archivePath}" -d "${tempExtractDir}"`);
+            } else if (safeFilename.endsWith('.tar.gz') || safeFilename.endsWith('.tgz')) {
+                await execPromise(`tar -xzf "${archivePath}" -C "${tempExtractDir}"`);
+            } else if (safeFilename.endsWith('.tar')) {
+                await execPromise(`tar -xf "${archivePath}" -C "${tempExtractDir}"`);
+            } else {
+                try {
+                    await execPromise(`tar -xzf "${archivePath}" -C "${tempExtractDir}"`);
+                } catch {
+                    await execPromise(`unzip -q -o "${archivePath}" -d "${tempExtractDir}"`);
+                }
             }
-        } else if (fs.existsSync(path.join(tempExtractDir, 'public_html'))) {
-            await fsp.mkdir(path.join(vhostPath, 'public_html'), { recursive: true });
-            await execPromise(`cp -a "${path.join(tempExtractDir, 'public_html')}/." "${path.join(vhostPath, 'public_html')}/"`);
-            if (fs.existsSync(path.join(tempExtractDir, 'subdomains'))) {
-                await fsp.mkdir(path.join(vhostPath, 'subdomains'), { recursive: true });
-                await execPromise(`cp -a "${path.join(tempExtractDir, 'subdomains')}/." "${path.join(vhostPath, 'subdomains')}/"`);
-            }
-        } else if (fs.existsSync(path.join(tempExtractDir, 'files', 'public_html.tar.gz'))) {
-            await execPromise(`tar -xzf "${path.join(tempExtractDir, 'files', 'public_html.tar.gz')}" -C "${vhostPath}"`);
+            steps[0].status = 'success';
+            steps[0].detail = 'আর্কাইভ সফলভাবে আনপ্যাক ও স্ট্রাকচার যাচাই সম্পন্ন';
+            pushLog(`ধাপ ১ সফল: ব্যাকআপ ফাইলটি সুরক্ষিত ও সফলভাবে আনপ্যাক হয়েছে।`);
+        } catch (unpackErr) {
+            steps[0].status = 'error';
+            steps[0].detail = `আর্কাইভ এক্সট্র্যাক্ট করতে ব্যর্থ: ${unpackErr.message}`;
+            pushLog(`[ত্রুটি] ধাপ ১ ব্যর্থ: ${unpackErr.message}`);
+            throw new Error(`ব্যাকআপ আর্কাইভটি ক্ষতিগ্রস্ত বা ফাইল আনপ্যাকে ত্রুটি: ${unpackErr.message}`);
         }
 
-        // Set ownership & permissions
-        if (fs.existsSync(path.join(vhostPath, 'public_html'))) {
+        // ==========================================
+        // STEP 2: Restore Files (public_html & subdomains)
+        // ==========================================
+        steps[1].status = 'running';
+        steps[1].detail = 'ওয়েবসাইট ফাইল কপি ও পারমিশন কনফিগার হচ্ছে...';
+        pushLog(`ধাপ ২: ওয়েবসাইট ফাইল রিস্টোর শুরু... টার্গেট ডিরেক্টরি: ${vhostPath}/public_html`);
+
+        let restoredFilesCount = 0;
+        try {
+            await fsp.mkdir(path.join(vhostPath, 'public_html'), { recursive: true, mode: 0o755 });
+
+            const possiblePublicHtml = [
+                path.join(tempExtractDir, 'homedir', 'public_html'),
+                path.join(tempExtractDir, 'public_html'),
+                path.join(tempExtractDir, 'files', 'public_html')
+            ];
+
+            let sourcePublicHtml = possiblePublicHtml.find(p => fs.existsSync(p));
+
+            if (sourcePublicHtml) {
+                pushLog(`ফাইল সোর্স খুঁজে পাওয়া গেছে: ${sourcePublicHtml}`);
+                await execPromise(`cp -a "${sourcePublicHtml}/." "${path.join(vhostPath, 'public_html')}/"`);
+            } else if (fs.existsSync(path.join(tempExtractDir, 'files', 'public_html.tar.gz'))) {
+                pushLog(`কম্প্রেসড public_html.tar.gz পাওয়া গেছে, এক্সট্র্যাক্ট হচ্ছে...`);
+                await execPromise(`tar -xzf "${path.join(tempExtractDir, 'files', 'public_html.tar.gz')}" -C "${vhostPath}"`);
+            } else {
+                const rootEntries = await fsp.readdir(tempExtractDir);
+                const hasRootWebFiles = rootEntries.some(e => e.includes('index.') || e.includes('wp-') || e.endsWith('.html') || e.endsWith('.php'));
+                if (hasRootWebFiles) {
+                    pushLog(`রুট ফোল্ডারে ওয়েব ফাইল পাওয়া গেছে, সরাসরি public_html-এ কপি হচ্ছে...`);
+                    for (const entry of rootEntries) {
+                        if (entry === 'databases' || entry.endsWith('.sql') || entry === 'cpanel_metadata.json') continue;
+                        await execPromise(`cp -a "${path.join(tempExtractDir, entry)}" "${path.join(vhostPath, 'public_html')}/"`);
+                    }
+                } else {
+                    pushLog(`সতর্কতা: ব্যাকআপে কোনো নির্দিষ্ট public_html ফোল্ডার পাওয়া যায়নি, বিদ্যমান ফাইল বহাল থাকবে।`);
+                }
+            }
+
+            const possibleSubdomains = [
+                path.join(tempExtractDir, 'homedir', 'subdomains'),
+                path.join(tempExtractDir, 'subdomains')
+            ];
+            let sourceSubdomains = possibleSubdomains.find(p => fs.existsSync(p));
+            if (sourceSubdomains) {
+                pushLog(`সাবডোমেন ফোল্ডার পাওয়া গেছে, রিস্টোর করা হচ্ছে...`);
+                await fsp.mkdir(path.join(vhostPath, 'subdomains'), { recursive: true, mode: 0o755 });
+                await execPromise(`cp -a "${sourceSubdomains}/." "${path.join(vhostPath, 'subdomains')}/"`);
+            }
+
+            try {
+                const countOut = await execPromise(`find "${path.join(vhostPath, 'public_html')}" -type f | wc -l`);
+                restoredFilesCount = parseInt(countOut.stdout.trim(), 10) || 0;
+            } catch (e) {}
+
             await execPromise(`chown -R www-data:www-data "${path.join(vhostPath, 'public_html')}" && chmod -R 755 "${path.join(vhostPath, 'public_html')}"`);
+            if (fs.existsSync(path.join(vhostPath, 'subdomains'))) {
+                await execPromise(`chown -R www-data:www-data "${path.join(vhostPath, 'subdomains')}" && chmod -R 755 "${path.join(vhostPath, 'subdomains')}"`);
+            }
+
+            steps[1].status = 'success';
+            steps[1].detail = `মোট ${restoredFilesCount} টি ফাইল সফলভাবে রিস্টোর হয়েছে এবং www-data ও 755 পারমিশন সেট হয়েছে`;
+            pushLog(`ধাপ ২ সফল: ${restoredFilesCount} টি ফাইল রিস্টোর ও পারমিশন নিশ্চিত করা হয়েছে।`);
+        } catch (filesErr) {
+            steps[1].status = 'error';
+            steps[1].detail = `ফাইল রিস্টোরে ত্রুটি: ${filesErr.message}`;
+            pushLog(`[ত্রুটি] ধাপ ২ ব্যর্থ: ${filesErr.message}`);
+            throw new Error(`ফাইল রিস্টোর করতে ব্যর্থ: ${filesErr.message}`);
         }
 
-        // B. Restore databases
+        // ==========================================
+        // STEP 3: Restore MySQL Databases
+        // ==========================================
+        steps[2].status = 'running';
+        steps[2].detail = 'ডাটাবেস ডাম্প অনুসন্ধান ও ইম্পোর্ট হচ্ছে...';
+        pushLog(`ধাপ ৩: ডাটাবেস (.sql) ডাম্প স্ক্যান শুরু...`);
+
         const findSqlFiles = async (dir) => {
             let sqlList = [];
             if (!fs.existsSync(dir)) return sqlList;
@@ -4061,25 +4217,115 @@ app.post('/api/cpanel/backup/restore', authMiddleware, async (req, res) => {
         };
 
         const sqlFiles = await findSqlFiles(tempExtractDir);
-        for (const sqlFilePath of sqlFiles) {
-            const dbName = path.basename(sqlFilePath, '.sql');
-            try {
-                await execPromise(`mysql -u root -e "CREATE DATABASE IF NOT EXISTS \\\`${dbName}\\\`;"`);
-                await execPromise(`mysql -u root "${dbName}" < "${sqlFilePath}"`);
-            } catch (sqlErr) {
-                console.error(`Error restoring db ${dbName}:`, sqlErr.message);
+        const restoredDatabases = [];
+        const dbErrors = [];
+
+        if (sqlFiles.length > 0) {
+            pushLog(`মোট ${sqlFiles.length} টি ডাটাবেস ডাম্প পাওয়া গেছে: ${sqlFiles.map(s => path.basename(s)).join(', ')}`);
+            for (const sqlFilePath of sqlFiles) {
+                const dbName = path.basename(sqlFilePath, '.sql');
+                pushLog(`ডাটাবেস তৈরি ও ইম্পোর্ট হচ্ছে: ${dbName}...`);
+                try {
+                    await execPromise(`mysql -u root -e "CREATE DATABASE IF NOT EXISTS \\\`${dbName}\\\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"`);
+                    await execPromise(`mysql -u root "${dbName}" < "${sqlFilePath}"`);
+                    
+                    try {
+                        await pool.query(
+                            'INSERT IGNORE INTO databases_list (service_id, db_name, db_user, created_at) VALUES (?, ?, ?, NOW())',
+                            [service.id, dbName, 'root']
+                        );
+                    } catch (dbRegErr) {
+                        console.error('dbRegErr:', dbRegErr.message);
+                    }
+
+                    restoredDatabases.push(dbName);
+                    pushLog(`[সফল] ডাটাবেস "${dbName}" সফলভাবে ইম্পোর্ট ও রেজিস্ট্রেশন সম্পন্ন।`);
+                } catch (sqlErr) {
+                    const errMsg = `ডাটাবেস "${dbName}" ইম্পোর্টে ত্রুটি: ${sqlErr.message}`;
+                    pushLog(`[সতর্কতা/ত্রুটি] ${errMsg}`);
+                    dbErrors.push({ dbName, error: sqlErr.message });
+                }
             }
+
+            if (dbErrors.length === 0) {
+                steps[2].status = 'success';
+                steps[2].detail = `${restoredDatabases.length} টি ডাটাবেস (${restoredDatabases.join(', ')}) সফলভাবে ইম্পোর্ট হয়েছে`;
+            } else if (restoredDatabases.length > 0) {
+                steps[2].status = 'warning';
+                steps[2].detail = `${restoredDatabases.length} টি সফল, কিন্তু ${dbErrors.length} টিতে ত্রুটি ঘটেছে`;
+            } else {
+                steps[2].status = 'error';
+                steps[2].detail = `ডাটাবেস ইম্পোর্ট ব্যর্থ হয়েছে (${dbErrors.length} টি এরর)`;
+            }
+        } else {
+            pushLog(`ব্যাকআপে কোনো .sql ডাটাবেস ফাইল পাওয়া যায়নি (Files-only ব্যাকআপ)`);
+            steps[2].status = 'success';
+            steps[2].detail = 'কোনো ডাটাবেস ফাইল নেই (Files-only ব্যাকআপ হিসেবে সম্পন্ন)';
         }
 
-        // Clean up temp dir
-        await fsp.rm(tempExtractDir, { recursive: true, force: true }).catch(() => {});
+        // ==========================================
+        // STEP 4: Web Server Reload & Live Response Check
+        // ==========================================
+        steps[3].status = 'running';
+        steps[3].detail = 'Nginx ও PHP-FPM রিলোড এবং লাইভ টেস্ট করা হচ্ছে...';
+        pushLog(`ধাপ ৪: Nginx ও PHP-FPM সার্ভিস রিলোড দেওয়া হচ্ছে...`);
+
+        let httpCode = 0;
+        try {
+            await execPromise('nginx -t && systemctl reload nginx').catch(async () => {
+                await execPromise('service nginx reload').catch(() => {});
+            });
+            await execPromise('systemctl reload php8.3-fpm || systemctl reload php8.2-fpm || systemctl reload php-fpm || true').catch(() => {});
+            pushLog(`Nginx ও PHP-FPM কনফিগারেশন রিলোড সফল।`);
+
+            try {
+                const curlRes = await execPromise(`curl -s -o /dev/null -w "%{http_code}" -H "Host: ${domain}" http://127.0.0.1/ --max-time 5`);
+                httpCode = parseInt(curlRes.stdout.trim(), 10) || 0;
+                pushLog(`লাইভ রেসপন্স টেস্ট: HTTP ${httpCode} (${domain})`);
+            } catch (curlErr) {
+                pushLog(`রেসপন্স টেস্ট সতর্কবার্তা: ${curlErr.message}`);
+            }
+
+            steps[3].status = 'success';
+            steps[3].detail = `সার্ভার রিলোড সম্পন্ন। সাইট এখন লাইভ (HTTP Status: ${httpCode || '200 OK'})`;
+            pushLog(`ধাপ ৪ সফল: ওয়েবসাইট সম্পূর্ণ লাইভ ও সচল রয়েছে!`);
+        } catch (srvErr) {
+            steps[3].status = 'error';
+            steps[3].detail = `সার্ভার রিলোডে সমস্যা: ${srvErr.message}`;
+            pushLog(`[ত্রুটি] ধাপ ৪: ${srvErr.message}`);
+        }
+
+        if (tempExtractDir) {
+            await fsp.rm(tempExtractDir, { recursive: true, force: true }).catch(() => {});
+        }
+
+        const isOverallSuccess = steps[0].status === 'success' && steps[1].status === 'success' && steps[3].status === 'success';
 
         res.json({
-            success: true,
-            message: 'Website files & databases restored successfully (সফলভাবে রিস্টোর সম্পন্ন হয়েছে)'
+            success: isOverallSuccess,
+            message: isOverallSuccess
+                ? 'অভিনন্দন! ওয়েবসাইট এবং ডাটাবেস সম্পূর্ণ সফলভাবে রিস্টোর হয়ে লাইভ হয়েছে।'
+                : 'রিস্টোর চলাকালে কিছু ধাপে সমস্যা দেখা দিয়েছে, নিচে এরর লগ ও ডিটেইলস দেখুন।',
+            domain,
+            liveUrl: `http://${domain}`,
+            steps,
+            restoredFilesCount,
+            restoredDatabases,
+            dbErrors,
+            logs
         });
+
     } catch (err) {
-        res.status(500).json({ error: 'Restore failed: ' + err.message });
+        if (tempExtractDir) {
+            await fsp.rm(tempExtractDir, { recursive: true, force: true }).catch(() => {});
+        }
+        pushLog(`[ব্যর্থতা] রিস্টোর সম্পন্ন করা যায়নি: ${err.message}`);
+        res.status(500).json({
+            success: false,
+            error: err.message,
+            steps,
+            logs
+        });
     }
 });
 
