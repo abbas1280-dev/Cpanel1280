@@ -3664,6 +3664,15 @@ app.post('/api/cpanel/cloudflare/sync-email-records', authMiddleware, async (req
 // ==========================================
 const BACKUP_BASE_DIR = '/var/cpanel/backups';
 
+function formatBytes(bytes) {
+    if (!bytes || bytes === 0) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    const val = (bytes / Math.pow(k, i)).toFixed(2);
+    return `${parseFloat(val)} ${sizes[i]}`;
+}
+
 async function getBackupDirectory(serviceId) {
     const dir = path.join(BACKUP_BASE_DIR, String(serviceId));
     await fsp.mkdir(dir, { recursive: true, mode: 0o755 });
@@ -3694,7 +3703,7 @@ app.get('/api/cpanel/backup/list', authMiddleware, async (req, res) => {
                 filename: file,
                 type,
                 sizeBytes: stat.size,
-                sizeFormatted: (stat.size / (1024 * 1024)).toFixed(2) + ' MB',
+                sizeFormatted: formatBytes(stat.size),
                 createdAt: stat.mtime
             });
         }
@@ -3715,6 +3724,7 @@ app.post('/api/cpanel/backup/create', authMiddleware, async (req, res) => {
         if (!service) return res.status(404).json({ error: 'Service not found' });
 
         const domain = service.domain;
+        const vhostPath = path.join('/var/www/vhosts', domain);
         const now = new Date();
         const dateStr = now.toISOString().slice(0, 10);
         const timeStr = now.toTimeString().slice(0, 8).replace(/:/g, '');
@@ -3727,11 +3737,20 @@ app.post('/api/cpanel/backup/create', authMiddleware, async (req, res) => {
         const finalFilename = `backup_${domain}_${timestamp}_${type}.tar.gz`;
         const finalFilePath = path.join(backupDir, finalFilename);
 
-        // A. Databases backup
         const [dbs] = await pool.query('SELECT db_name FROM databases_list WHERE service_id = ?', [service.id]);
         const dbNames = dbs.map(d => d.db_name);
 
-        if (type === 'full' || type === 'database') {
+        if (type === 'files') {
+            // Include public_html and subdomains directly (NO double nested archive!)
+            const items = [];
+            if (fs.existsSync(path.join(vhostPath, 'public_html'))) items.push('public_html');
+            if (fs.existsSync(path.join(vhostPath, 'subdomains'))) items.push('subdomains');
+            if (items.length === 0) {
+                await fsp.mkdir(path.join(vhostPath, 'public_html'), { recursive: true });
+                items.push('public_html');
+            }
+            await execPromise(`tar -czf "${finalFilePath}" -C "${vhostPath}" ${items.join(' ')}`);
+        } else if (type === 'database') {
             const dbDir = path.join(tempWorkDir, 'databases');
             await fsp.mkdir(dbDir, { recursive: true });
 
@@ -3743,43 +3762,62 @@ app.post('/api/cpanel/backup/create', authMiddleware, async (req, res) => {
                     console.error(`Dump failed for ${dbName}:`, dumpErr.message);
                 }
             }
-        }
 
-        // B. Files backup
-        const vhostPath = path.join('/var/www/vhosts', domain);
-        if (type === 'full' || type === 'files') {
-            const filesDir = path.join(tempWorkDir, 'files');
-            await fsp.mkdir(filesDir, { recursive: true });
-
-            const publicHtmlPath = path.join(vhostPath, 'public_html');
-            const targetTar = path.join(filesDir, 'public_html.tar.gz');
-            if (fs.existsSync(publicHtmlPath)) {
-                await execPromise(`tar -czf "${targetTar}" -C "${vhostPath}" public_html`);
+            const metadata = {
+                serviceId: service.id,
+                domain: service.domain,
+                backupType: 'database',
+                createdAt: now.toISOString(),
+                databases: dbNames,
+                platform: 'Cpanel1280-Enterprise'
+            };
+            await fsp.writeFile(path.join(tempWorkDir, 'cpanel_metadata.json'), JSON.stringify(metadata, null, 2), 'utf8');
+            await execPromise(`tar -czf "${finalFilePath}" -C "${tempWorkDir}" .`);
+        } else { // type === 'full'
+            // 1. Homedir with public_html and subdomains
+            const homedir = path.join(tempWorkDir, 'homedir');
+            await fsp.mkdir(homedir, { recursive: true });
+            if (fs.existsSync(path.join(vhostPath, 'public_html'))) {
+                await execPromise(`cp -a "${path.join(vhostPath, 'public_html')}" "${homedir}/"`);
             }
+            if (fs.existsSync(path.join(vhostPath, 'subdomains'))) {
+                await execPromise(`cp -a "${path.join(vhostPath, 'subdomains')}" "${homedir}/"`);
+            }
+
+            // 2. Databases
+            const dbDir = path.join(tempWorkDir, 'databases');
+            await fsp.mkdir(dbDir, { recursive: true });
+            for (const dbName of dbNames) {
+                const dumpFile = path.join(dbDir, `${dbName}.sql`);
+                try {
+                    await execPromise(`mysqldump -u root "${dbName}" > "${dumpFile}"`);
+                } catch (dumpErr) {
+                    console.error(`Dump failed for ${dbName}:`, dumpErr.message);
+                }
+            }
+
+            // 3. Metadata
+            const [emails] = await pool.query('SELECT email_user, full_email, quota_mb FROM email_accounts WHERE service_id = ?', [service.id]);
+            const [crons] = await pool.query('SELECT schedule, command FROM cron_jobs WHERE service_id = ?', [service.id]);
+            const [subs] = await pool.query('SELECT subdomain, doc_root, php_version FROM subdomains WHERE service_id = ?', [service.id]);
+
+            const metadata = {
+                serviceId: service.id,
+                domain: service.domain,
+                phpVersion: service.php_version,
+                backupType: 'full',
+                createdAt: now.toISOString(),
+                databases: dbNames,
+                subdomains: subs,
+                emailAccounts: emails,
+                cronJobs: crons,
+                platform: 'Cpanel1280-Enterprise'
+            };
+            await fsp.writeFile(path.join(tempWorkDir, 'cpanel_metadata.json'), JSON.stringify(metadata, null, 2), 'utf8');
+
+            // 4. Create master archive
+            await execPromise(`tar -czf "${finalFilePath}" -C "${tempWorkDir}" .`);
         }
-
-        // C. Metadata
-        const [emails] = await pool.query('SELECT email_user, full_email, quota_mb FROM email_accounts WHERE service_id = ?', [service.id]);
-        const [crons] = await pool.query('SELECT schedule, command FROM cron_jobs WHERE service_id = ?', [service.id]);
-        const [subs] = await pool.query('SELECT subdomain, doc_root, php_version FROM subdomains WHERE service_id = ?', [service.id]);
-
-        const metadata = {
-            serviceId: service.id,
-            domain: service.domain,
-            phpVersion: service.php_version,
-            backupType: type,
-            createdAt: now.toISOString(),
-            databases: dbNames,
-            subdomains: subs,
-            emailAccounts: emails,
-            cronJobs: crons,
-            platform: 'Cpanel1280-Enterprise'
-        };
-
-        await fsp.writeFile(path.join(tempWorkDir, 'cpanel_metadata.json'), JSON.stringify(metadata, null, 2), 'utf8');
-
-        // D. Create final combined tarball
-        await execPromise(`tar -czf "${finalFilePath}" -C "${tempWorkDir}" .`);
 
         // Clean up temp dir
         await fsp.rm(tempWorkDir, { recursive: true, force: true }).catch(() => {});
@@ -3788,12 +3826,12 @@ app.post('/api/cpanel/backup/create', authMiddleware, async (req, res) => {
 
         res.json({
             success: true,
-            message: 'Backup created successfully (ব্যাকআপ সফলভাবে তৈরি হয়েছে)',
+            message: `Backup created successfully (ব্যাকআপ সফলভাবে তৈরি হয়েছে - ${formatBytes(stat.size)})`,
             backup: {
                 filename: finalFilename,
                 type,
                 sizeBytes: stat.size,
-                sizeFormatted: (stat.size / (1024 * 1024)).toFixed(2) + ' MB',
+                sizeFormatted: formatBytes(stat.size),
                 createdAt: stat.mtime
             }
         });
@@ -3846,27 +3884,54 @@ app.post('/api/cpanel/backup/restore', authMiddleware, async (req, res) => {
         // Extract master archive
         await execPromise(`tar -xzf "${archivePath}" -C "${tempExtractDir}"`);
 
-        // A. Restore files if present
-        const filesTar = path.join(tempExtractDir, 'files', 'public_html.tar.gz');
-        if (fs.existsSync(filesTar)) {
-            await execPromise(`tar -xzf "${filesTar}" -C "${vhostPath}"`);
-            await execPromise(`chown -R www-data:www-data "${path.join(vhostPath, 'public_html')}"`);
+        // A. Restore files (Handles all formats: Full homedir, direct files, and legacy archive)
+        if (fs.existsSync(path.join(tempExtractDir, 'homedir', 'public_html'))) {
+            await fsp.mkdir(path.join(vhostPath, 'public_html'), { recursive: true });
+            await execPromise(`cp -a "${path.join(tempExtractDir, 'homedir', 'public_html')}/." "${path.join(vhostPath, 'public_html')}/"`);
+            if (fs.existsSync(path.join(tempExtractDir, 'homedir', 'subdomains'))) {
+                await fsp.mkdir(path.join(vhostPath, 'subdomains'), { recursive: true });
+                await execPromise(`cp -a "${path.join(tempExtractDir, 'homedir', 'subdomains')}/." "${path.join(vhostPath, 'subdomains')}/"`);
+            }
+        } else if (fs.existsSync(path.join(tempExtractDir, 'public_html'))) {
+            await fsp.mkdir(path.join(vhostPath, 'public_html'), { recursive: true });
+            await execPromise(`cp -a "${path.join(tempExtractDir, 'public_html')}/." "${path.join(vhostPath, 'public_html')}/"`);
+            if (fs.existsSync(path.join(tempExtractDir, 'subdomains'))) {
+                await fsp.mkdir(path.join(vhostPath, 'subdomains'), { recursive: true });
+                await execPromise(`cp -a "${path.join(tempExtractDir, 'subdomains')}/." "${path.join(vhostPath, 'subdomains')}/"`);
+            }
+        } else if (fs.existsSync(path.join(tempExtractDir, 'files', 'public_html.tar.gz'))) {
+            await execPromise(`tar -xzf "${path.join(tempExtractDir, 'files', 'public_html.tar.gz')}" -C "${vhostPath}"`);
         }
 
-        // B. Restore databases if present
-        const dbDir = path.join(tempExtractDir, 'databases');
-        if (fs.existsSync(dbDir)) {
-            const sqlFiles = await fsp.readdir(dbDir);
-            for (const sqlFile of sqlFiles) {
-                if (!sqlFile.endsWith('.sql')) continue;
-                const dbName = sqlFile.replace(/\.sql$/, '');
-                const sqlFilePath = path.join(dbDir, sqlFile);
-                try {
-                    await execPromise(`mysql -u root -e "CREATE DATABASE IF NOT EXISTS \\\`${dbName}\\\`;"`);
-                    await execPromise(`mysql -u root "${dbName}" < "${sqlFilePath}"`);
-                } catch (sqlErr) {
-                    console.error(`Error restoring db ${dbName}:`, sqlErr.message);
+        // Set ownership & permissions
+        if (fs.existsSync(path.join(vhostPath, 'public_html'))) {
+            await execPromise(`chown -R www-data:www-data "${path.join(vhostPath, 'public_html')}" && chmod -R 755 "${path.join(vhostPath, 'public_html')}"`);
+        }
+
+        // B. Restore databases
+        const findSqlFiles = async (dir) => {
+            let sqlList = [];
+            if (!fs.existsSync(dir)) return sqlList;
+            const entries = await fsp.readdir(dir, { withFileTypes: true });
+            for (const e of entries) {
+                const full = path.join(dir, e.name);
+                if (e.isDirectory()) {
+                    sqlList = sqlList.concat(await findSqlFiles(full));
+                } else if (e.name.endsWith('.sql')) {
+                    sqlList.push(full);
                 }
+            }
+            return sqlList;
+        };
+
+        const sqlFiles = await findSqlFiles(tempExtractDir);
+        for (const sqlFilePath of sqlFiles) {
+            const dbName = path.basename(sqlFilePath, '.sql');
+            try {
+                await execPromise(`mysql -u root -e "CREATE DATABASE IF NOT EXISTS \\\`${dbName}\\\`;"`);
+                await execPromise(`mysql -u root "${dbName}" < "${sqlFilePath}"`);
+            } catch (sqlErr) {
+                console.error(`Error restoring db ${dbName}:`, sqlErr.message);
             }
         }
 

@@ -7868,6 +7868,19 @@
                         hour: '2-digit', minute: '2-digit'
                     });
 
+                    function formatBackupBytes(bytes) {
+                        if (!bytes || bytes === 0) return '0 B';
+                        const k = 1024;
+                        const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+                        const i = Math.floor(Math.log(bytes) / Math.log(k));
+                        const val = (bytes / Math.pow(k, i)).toFixed(2);
+                        return `${parseFloat(val)} ${sizes[i]}`;
+                    }
+
+                    const displaySize = (b.sizeFormatted && !b.sizeFormatted.startsWith('0.00')) 
+                        ? b.sizeFormatted 
+                        : formatBackupBytes(b.sizeBytes);
+
                     return `
                         <tr class="hover:bg-slate-800/40 transition">
                             <td class="py-3 px-4">
@@ -7877,7 +7890,7 @@
                                 </div>
                             </td>
                             <td class="py-3 px-4">${typeBadge}</td>
-                            <td class="py-3 px-4 font-bold text-slate-200">${b.sizeFormatted}</td>
+                            <td class="py-3 px-4 font-bold text-slate-200">${displaySize}</td>
                             <td class="py-3 px-4 font-sans text-slate-400 text-[11px]">${dateFormatted}</td>
                             <td class="py-3 px-4 text-right whitespace-nowrap">
                                 <div class="flex items-center justify-end gap-1.5 font-sans">
