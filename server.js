@@ -2432,6 +2432,30 @@ app.post('/api/cpanel/cron/delete', authMiddleware, async (req, res) => {
     }
 });
 
+app.post('/api/cpanel/cron/update', authMiddleware, async (req, res) => {
+    try {
+        const { serviceId, cronId, schedule, command } = req.body;
+        const service = await getServiceForUser(serviceId, req.user);
+        if (!service) return res.status(404).json({ error: 'Service not found' });
+
+        if (!cronId || !schedule || !command) {
+            return res.status(400).json({ error: 'Cron ID, schedule, and command are required' });
+        }
+
+        await pool.query(
+            'UPDATE cron_jobs SET schedule = ?, command = ? WHERE id = ? AND service_id = ?',
+            [schedule.trim(), command.trim(), cronId, serviceId]
+        );
+
+        // Update Linux crontab immediately
+        await updateSystemCrontab(serviceId);
+
+        res.json({ message: 'Cron job updated successfully' });
+    } catch (err) {
+        res.status(500).json({ error: 'Failed to update cron job: ' + err.message });
+    }
+});
+
 // ==========================================
 // 8. MULTI-PHP MANAGEMENT & DIRECTIVES
 // ==========================================

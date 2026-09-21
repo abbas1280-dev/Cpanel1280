@@ -3262,42 +3262,85 @@
             <!-- TAB 7: CRON JOBS -->
             <div id="tpanel-tab-content-cron" class="cpanel-view space-y-6 hidden">
                 <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                    <!-- Add Cron Form -->
-                    <div class="glass-card rounded-2xl p-6 border border-darkborder lg:col-span-1">
-                        <h3 class="text-base font-bold text-white mb-2 flex items-center gap-2">
-                            <i data-lucide="clock" class="w-4 h-4 text-amber-400"></i>
-                            <span>Schedule Cron Job</span>
-                        </h3>
-                        <p class="text-xs text-slate-400 mb-4">Run background commands or PHP scripts periodically.</p>
+                    <!-- Add / Edit Cron Form -->
+                    <div id="cron-form-card" class="glass-card rounded-2xl p-6 border border-darkborder lg:col-span-1 transition-all duration-300">
+                        <div class="flex items-center justify-between mb-2">
+                            <h3 class="text-base font-bold text-white flex items-center gap-2">
+                                <i data-lucide="clock" id="cron-form-icon" class="w-4 h-4 text-amber-400"></i>
+                                <span id="cron-form-title">Schedule Cron Job</span>
+                            </h3>
+                            <span id="cron-edit-badge" class="hidden px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-500/20 text-blue-300 border border-blue-500/30">
+                                Editing
+                            </span>
+                        </div>
+                        <p class="text-xs text-slate-400 mb-4" id="cron-form-desc">নির্দিষ্ট সময় অন্তর ব্যাকগ্রাউন্ড কমান্ড বা স্ক্রিপ্ট রান করুন।</p>
 
                         <form onsubmit="handleCreateCron(event)" class="space-y-4">
+                            <input type="hidden" id="cron-edit-id" value="">
                             <div>
-                                <label class="block text-xs font-medium text-slate-400 mb-1">Preset Frequency</label>
+                                <label class="block text-xs font-medium text-slate-400 mb-1">Preset Frequency (সময়সূচী নির্বাচন)</label>
                                 <select id="cron-preset-select" onchange="applyCronPreset(this.value)" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-brand-500">
-                                    <option value="* * * * *">Every Minute (* * * * *)</option>
-                                    <option value="*/5 * * * *">Every 5 Minutes (*/5 * * * *)</option>
-                                    <option value="0 * * * *">Every Hour (0 * * * *)</option>
-                                    <option value="0 0 * * *">Daily at Midnight (0 0 * * *)</option>
-                                    <option value="custom">Custom Expression</option>
+                                    <option value="* * * * *">প্রতি ১ মিনিট (Every Minute: * * * * *)</option>
+                                    <option value="*/5 * * * *">প্রতি ৫ মিনিট (Every 5 Minutes: */5 * * * *)</option>
+                                    <option value="*/10 * * * *">প্রতি ১০ মিনিট (Every 10 Minutes: */10 * * * *)</option>
+                                    <option value="*/15 * * * *">প্রতি ১৫ মিনিট (Every 15 Minutes: */15 * * * *)</option>
+                                    <option value="*/30 * * * *">প্রতি ৩০ মিনিট (Every 30 Minutes: */30 * * * *)</option>
+                                    <option value="0 * * * *">প্রতি ১ ঘন্টা (Every Hour: 0 * * * *)</option>
+                                    <option value="0 0,12 * * *">দিনে ২ বার (Twice a Day: 0 0,12 * * *)</option>
+                                    <option value="0 0 * * *">প্রতিদিন রাত ১২টায় (Daily Midnight: 0 0 * * *)</option>
+                                    <option value="0 0 * * 0">সাপ্তাহিক (Weekly Sunday: 0 0 * * 0)</option>
+                                    <option value="0 0 1 * *">মাসিক (Monthly 1st: 0 0 1 * *)</option>
+                                    <option value="custom">কাস্টম এক্সপ্রেশন (Custom Expression)</option>
                                 </select>
                             </div>
+
+                            <!-- Quick Preset Chips -->
                             <div>
-                                <label class="block text-xs font-medium text-slate-400 mb-1">Cron Expression</label>
-                                <input type="text" id="cron-schedule" required value="* * * * *" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs font-mono text-white focus:outline-none focus:border-brand-500">
+                                <label class="block text-[11px] font-medium text-slate-400 mb-1.5">দ্রুত সেট করুন (Quick Set):</label>
+                                <div class="flex flex-wrap gap-1.5">
+                                    <button type="button" onclick="setQuickCronSchedule('* * * * *')" class="px-2 py-1 rounded-lg text-[11px] bg-slate-800 hover:bg-amber-500/20 text-slate-300 hover:text-amber-300 border border-slate-700 hover:border-amber-500/40 transition">১ মিনিট</button>
+                                    <button type="button" onclick="setQuickCronSchedule('*/5 * * * *')" class="px-2 py-1 rounded-lg text-[11px] bg-slate-800 hover:bg-amber-500/20 text-slate-300 hover:text-amber-300 border border-slate-700 hover:border-amber-500/40 transition font-bold text-amber-400">৫ মিনিট</button>
+                                    <button type="button" onclick="setQuickCronSchedule('*/15 * * * *')" class="px-2 py-1 rounded-lg text-[11px] bg-slate-800 hover:bg-amber-500/20 text-slate-300 hover:text-amber-300 border border-slate-700 hover:border-amber-500/40 transition">১৫ মিনিট</button>
+                                    <button type="button" onclick="setQuickCronSchedule('*/30 * * * *')" class="px-2 py-1 rounded-lg text-[11px] bg-slate-800 hover:bg-amber-500/20 text-slate-300 hover:text-amber-300 border border-slate-700 hover:border-amber-500/40 transition">৩০ মিনিট</button>
+                                    <button type="button" onclick="setQuickCronSchedule('0 * * * *')" class="px-2 py-1 rounded-lg text-[11px] bg-slate-800 hover:bg-amber-500/20 text-slate-300 hover:text-amber-300 border border-slate-700 hover:border-amber-500/40 transition">১ ঘন্টা</button>
+                                    <button type="button" onclick="setQuickCronSchedule('0 0 * * *')" class="px-2 py-1 rounded-lg text-[11px] bg-slate-800 hover:bg-amber-500/20 text-slate-300 hover:text-amber-300 border border-slate-700 hover:border-amber-500/40 transition">প্রতিদিন</button>
+                                </div>
+                            </div>
+
+                            <div>
+                                <label class="block text-xs font-medium text-slate-400 mb-1">Cron Expression (ক্রন ফরম্যাট)</label>
+                                <input type="text" id="cron-schedule" required value="* * * * *" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs font-mono text-white focus:outline-none focus:border-brand-500" placeholder="* * * * *">
+                                <p class="text-[10px] text-slate-500 mt-1 font-mono">মিনিট ঘন্টা দিন মাস বার (যেমন: */5 * * * *)</p>
                             </div>
                             <div>
-                                <label class="block text-xs font-medium text-slate-400 mb-1">Command to Execute</label>
+                                <label class="block text-xs font-medium text-slate-400 mb-1">Command to Execute (কমান্ড)</label>
                                 <input type="text" id="cron-command" required placeholder="php /var/www/vhosts/.../cron.php" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs font-mono text-white focus:outline-none focus:border-brand-500">
                             </div>
-                            <button type="submit" class="w-full bg-amber-600 hover:bg-amber-500 text-white font-semibold py-2 rounded-xl text-xs transition shadow-md shadow-amber-500/20">
-                                Schedule Job
-                            </button>
+                            <div class="flex items-center gap-2 pt-1">
+                                <button type="submit" id="cron-submit-btn" class="flex-1 bg-amber-600 hover:bg-amber-500 text-white font-semibold py-2.5 rounded-xl text-xs transition shadow-md shadow-amber-500/20 flex items-center justify-center gap-2">
+                                    <i data-lucide="plus-circle" class="w-4 h-4"></i>
+                                    <span>Schedule Job</span>
+                                </button>
+                                <button type="button" id="cron-cancel-edit-btn" onclick="cancelCronEdit()" class="hidden px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs transition flex items-center gap-1.5 font-medium">
+                                    <i data-lucide="x" class="w-3.5 h-3.5"></i>
+                                    <span>বাতিল</span>
+                                </button>
+                            </div>
                         </form>
                     </div>
 
                     <!-- Active Cron List -->
                     <div class="glass-card rounded-2xl p-6 border border-darkborder lg:col-span-2">
-                        <h3 class="text-base font-bold text-white mb-4">Active Scheduled Tasks</h3>
+                        <div class="flex items-center justify-between mb-4">
+                            <div>
+                                <h3 class="text-base font-bold text-white">Active Scheduled Tasks</h3>
+                                <p class="text-xs text-slate-400">আপনার ডোমেইনে ব্যাকগ্রাউন্ডে সক্রিয় ক্রন জবগুলোর তালিকা</p>
+                            </div>
+                            <button onclick="loadCronJobs()" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs flex items-center gap-1.5 transition">
+                                <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>
+                                <span>রিফ্রেশ</span>
+                            </button>
+                        </div>
                         <div class="overflow-x-auto">
                             <table class="w-full text-left text-xs">
                                 <thead>
@@ -7446,28 +7489,73 @@
             }
         }
 
-        // 5. Cron Jobs Loader
+        // 5. Cron Jobs Loader & Manager
+        let cachedCronJobs = [];
+
+        function escapeHtmlCron(str) {
+            if (!str) return '';
+            return String(str).replace(/[&<>"']/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m]));
+        }
+
+        function getCronHumanReadable(sched) {
+            if (!sched) return '';
+            const s = sched.trim();
+            if (s === '* * * * *') return 'প্রতি ১ মিনিটে চলবে';
+            if (s === '*/5 * * * *') return 'প্রতি ৫ মিনিটে চলবে';
+            if (s === '*/10 * * * *') return 'প্রতি ১০ মিনিটে চলবে';
+            if (s === '*/15 * * * *') return 'প্রতি ১৫ মিনিটে চলবে';
+            if (s === '*/30 * * * *') return 'প্রতি ৩০ মিনিটে চলবে';
+            if (s === '0 * * * *') return 'প্রতি ১ ঘন্টায় চলবে';
+            if (s === '0 0,12 * * *') return 'দিনে ২ বার (১২am ও ১২pm)';
+            if (s === '0 0 * * *') return 'প্রতিদিন রাত ১২:০০ টায়';
+            if (s === '0 0 * * 0') return 'সাপ্তাহিক (রবিবার রাত ১২টায়)';
+            if (s === '0 0 1 * *') return 'মাসের প্রথম দিন রাত ১২টায়';
+            if (s.startsWith('*/')) {
+                const parts = s.split(' ');
+                const mins = parts[0].replace('*/', '');
+                return `প্রতি ${mins} মিনিট অন্তর`;
+            }
+            return 'কাস্টম সময়সূচী';
+        }
+
         async function loadCronJobs() {
+            if (!selectedService) return;
             try {
                 const res = await fetch(`/api/cpanel/cron?serviceId=${selectedService.id}`, {
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
                 const data = await res.json();
                 const tbody = document.getElementById('cron-list-tbody');
+                cachedCronJobs = data.cronJobs || [];
 
-                if (!data.cronJobs || data.cronJobs.length === 0) {
-                    tbody.innerHTML = `<tr><td colspan="3" class="py-6 text-center text-slate-500">No scheduled cron jobs</td></tr>`;
+                if (!cachedCronJobs || cachedCronJobs.length === 0) {
+                    tbody.innerHTML = `<tr><td colspan="3" class="py-8 text-center text-slate-500 font-sans">কোনো শিডিউল করা ক্রন জব পাওয়া যায়নি</td></tr>`;
                     return;
                 }
 
-                tbody.innerHTML = data.cronJobs.map(c => `
+                tbody.innerHTML = cachedCronJobs.map(c => `
                     <tr class="hover:bg-slate-800/40 transition">
-                        <td class="py-2.5 font-bold text-amber-300">${c.schedule}</td>
-                        <td class="py-2.5 text-slate-300 text-[11px]">${c.command}</td>
-                        <td class="py-2.5 text-right">
-                            <button onclick="deleteCronJob(${c.id})" class="p-1 rounded hover:bg-slate-700 text-rose-400" title="Delete">
-                                <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
-                            </button>
+                        <td class="py-3 font-bold text-amber-300 whitespace-nowrap">
+                            <span class="px-2 py-0.5 rounded bg-amber-500/10 border border-amber-500/20 text-amber-400 text-xs">${escapeHtmlCron(c.schedule)}</span>
+                            <div class="text-[10px] text-slate-400 font-sans mt-1 flex items-center gap-1">
+                                <i data-lucide="play" class="w-2.5 h-2.5 text-amber-400"></i>
+                                <span>${getCronHumanReadable(c.schedule)}</span>
+                            </div>
+                        </td>
+                        <td class="py-3 text-slate-300 text-[11px] break-all max-w-[280px] sm:max-w-md">
+                            <div class="bg-slate-900/80 px-2.5 py-1.5 rounded-lg border border-slate-800 text-slate-300 font-mono text-[11px]">${escapeHtmlCron(c.command)}</div>
+                        </td>
+                        <td class="py-3 text-right whitespace-nowrap">
+                            <div class="flex items-center justify-end gap-1.5">
+                                <button onclick="startEditCron(${c.id})" class="px-2.5 py-1 rounded-lg bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 border border-blue-500/20 transition flex items-center gap-1 text-xs font-sans" title="এডিট করুন (Edit)">
+                                    <i data-lucide="edit-3" class="w-3.5 h-3.5"></i>
+                                    <span>Edit</span>
+                                </button>
+                                <button onclick="deleteCronJob(${c.id})" class="px-2.5 py-1 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 transition flex items-center gap-1 text-xs font-sans" title="মুছে ফেলুন (Delete)">
+                                    <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+                                    <span>Delete</span>
+                                </button>
+                            </div>
                         </td>
                     </tr>
                 `).join('');
@@ -7484,25 +7572,125 @@
             }
         }
 
+        function setQuickCronSchedule(sched) {
+            document.getElementById('cron-schedule').value = sched;
+            const sel = document.getElementById('cron-preset-select');
+            let matched = false;
+            for (let i = 0; i < sel.options.length; i++) {
+                if (sel.options[i].value === sched) {
+                    sel.selectedIndex = i;
+                    matched = true;
+                    break;
+                }
+            }
+            if (!matched) sel.value = 'custom';
+            document.getElementById('cron-command').focus();
+        }
+
+        function startEditCron(cronId) {
+            const cron = cachedCronJobs.find(c => c.id == cronId);
+            if (!cron) return;
+
+            document.getElementById('cron-edit-id').value = cron.id;
+            document.getElementById('cron-schedule').value = cron.schedule;
+            document.getElementById('cron-command').value = cron.command;
+
+            // Match preset
+            const sel = document.getElementById('cron-preset-select');
+            let matched = false;
+            for (let i = 0; i < sel.options.length; i++) {
+                if (sel.options[i].value === cron.schedule) {
+                    sel.selectedIndex = i;
+                    matched = true;
+                    break;
+                }
+            }
+            if (!matched) sel.value = 'custom';
+
+            // Switch form to Edit Mode
+            document.getElementById('cron-form-title').textContent = `Edit Cron Job #${cron.id}`;
+            document.getElementById('cron-form-desc').textContent = 'সময়সূচী বা কমান্ড পরিবর্তন করে "Save Changes" এ চাপুন।';
+            document.getElementById('cron-edit-badge').classList.remove('hidden');
+            document.getElementById('cron-cancel-edit-btn').classList.remove('hidden');
+
+            const submitBtn = document.getElementById('cron-submit-btn');
+            submitBtn.className = 'flex-1 bg-blue-600 hover:bg-blue-500 text-white font-semibold py-2.5 rounded-xl text-xs transition shadow-md shadow-blue-500/20 flex items-center justify-center gap-2';
+            submitBtn.innerHTML = '<i data-lucide="check" class="w-4 h-4"></i><span>Save Changes (আপডেট করুন)</span>';
+
+            const formCard = document.getElementById('cron-form-card');
+            formCard.classList.add('ring-2', 'ring-blue-500/40');
+
+            lucide.createIcons();
+
+            // Focus and scroll
+            formCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            document.getElementById('cron-schedule').focus();
+        }
+
+        function cancelCronEdit() {
+            document.getElementById('cron-edit-id').value = '';
+            document.getElementById('cron-schedule').value = '* * * * *';
+            document.getElementById('cron-command').value = '';
+            document.getElementById('cron-preset-select').value = '* * * * *';
+
+            document.getElementById('cron-form-title').textContent = 'Schedule Cron Job';
+            document.getElementById('cron-form-desc').textContent = 'নির্দিষ্ট সময় অন্তর ব্যাকগ্রাউন্ড কমান্ড বা স্ক্রিপ্ট রান করুন।';
+            document.getElementById('cron-edit-badge').classList.add('hidden');
+            document.getElementById('cron-cancel-edit-btn').classList.add('hidden');
+
+            const submitBtn = document.getElementById('cron-submit-btn');
+            submitBtn.className = 'flex-1 bg-amber-600 hover:bg-amber-500 text-white font-semibold py-2.5 rounded-xl text-xs transition shadow-md shadow-amber-500/20 flex items-center justify-center gap-2';
+            submitBtn.innerHTML = '<i data-lucide="plus-circle" class="w-4 h-4"></i><span>Schedule Job</span>';
+
+            const formCard = document.getElementById('cron-form-card');
+            if (formCard) formCard.classList.remove('ring-2', 'ring-blue-500/40');
+
+            lucide.createIcons();
+        }
+
         async function handleCreateCron(e) {
             e.preventDefault();
-            const schedule = document.getElementById('cron-schedule').value;
-            const command = document.getElementById('cron-command').value;
+            const editId = document.getElementById('cron-edit-id').value;
+            const schedule = document.getElementById('cron-schedule').value.trim();
+            const command = document.getElementById('cron-command').value.trim();
+
+            if (!schedule || !command) {
+                showToast('Schedule and command are required', 'error');
+                return;
+            }
 
             try {
-                const res = await fetch('/api/cpanel/cron/create', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${token}`
-                    },
-                    body: JSON.stringify({ serviceId: selectedService.id, schedule, command })
-                });
-                const data = await res.json();
-                if (!res.ok) throw new Error(data.error);
+                if (editId) {
+                    // Update Cron Job
+                    const res = await fetch('/api/cpanel/cron/update', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${token}`
+                        },
+                        body: JSON.stringify({ serviceId: selectedService.id, cronId: editId, schedule, command })
+                    });
+                    const data = await res.json();
+                    if (!res.ok) throw new Error(data.error || 'Failed to update cron job');
 
-                showToast('Cron job scheduled');
-                document.getElementById('cron-command').value = '';
+                    showToast('ক্রন জব সফলভাবে আপডেট করা হয়েছে (Cron job updated)', 'success');
+                    cancelCronEdit();
+                } else {
+                    // Create New Cron Job
+                    const res = await fetch('/api/cpanel/cron/create', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${token}`
+                        },
+                        body: JSON.stringify({ serviceId: selectedService.id, schedule, command })
+                    });
+                    const data = await res.json();
+                    if (!res.ok) throw new Error(data.error || 'Failed to schedule cron job');
+
+                    showToast('নতুন ক্রন জব সফলভাবে যুক্ত করা হয়েছে (Cron job scheduled)', 'success');
+                    cancelCronEdit();
+                }
                 loadCronJobs();
             } catch (err) {
                 showToast(err.message, 'error');
@@ -7510,7 +7698,7 @@
         }
 
         async function deleteCronJob(cronId) {
-            if (!confirm('Remove this cron job?')) return;
+            if (!confirm('আপনি কি এই ক্রন জবটি মুছে ফেলতে চান? (Delete cron job?)')) return;
             try {
                 const res = await fetch('/api/cpanel/cron/delete', {
                     method: 'POST',
@@ -7523,7 +7711,10 @@
                 const data = await res.json();
                 if (!res.ok) throw new Error(data.error);
 
-                showToast('Cron job removed');
+                showToast('ক্রন জবটি মুছে ফেলা হয়েছে', 'info');
+                if (document.getElementById('cron-edit-id').value == cronId) {
+                    cancelCronEdit();
+                }
                 loadCronJobs();
             } catch (err) {
                 showToast(err.message, 'error');
