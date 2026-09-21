@@ -3384,6 +3384,14 @@
                                 <span>1-Click Website & Database Backup & Restore</span>
                             </h3>
                             <p class="text-xs text-slate-400 mt-1">আপনার ওয়েবসাইটের ফাইল, ডাটাবেস ও সেটিংসের নিরাপদ ব্যাকআপ তৈরি, অটো ব্যাকআপ ও রিস্টোর করুন।</p>
+                            <div class="mt-2.5 flex items-center gap-2 flex-wrap text-xs">
+                                <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-teal-500/10 text-teal-300 border border-teal-500/20 font-mono font-semibold">
+                                    <i data-lucide="shield-check" class="w-3.5 h-3.5 text-teal-400"></i>
+                                    <span>Isolated Domain:</span>
+                                    <span id="backup-current-domain-badge" class="text-white font-bold">--</span>
+                                </span>
+                                <span class="text-[11px] text-slate-400">🔒 প্রতিটি সিপ্যানেল ও ডোমেইনের ব্যাকআপ সম্পূর্ণ আলাদা ডিরেক্টরিতে আইসোলেটেড ও সুরক্ষিত থাকে। অন্য কোনো ডোমেইন বা ইউজার এটি দেখতে পারবে না।</span>
+                            </div>
                         </div>
                         <div class="flex items-center gap-2 self-start sm:self-auto">
                             <button onclick="loadBackupsList()" class="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs flex items-center gap-1.5 transition">
@@ -3551,10 +3559,13 @@
 
                     <!-- Existing Backups Table -->
                     <div>
-                        <h4 class="text-sm font-bold text-white mb-3 flex items-center gap-2">
-                            <i data-lucide="history" class="w-4 h-4 text-slate-400"></i>
-                            <span>উপলব্ধ ব্যাকআপ আর্কাইভ (Available Backups)</span>
-                        </h4>
+                        <div class="flex items-center justify-between mb-3">
+                            <h4 class="text-sm font-bold text-white flex items-center gap-2">
+                                <i data-lucide="history" class="w-4 h-4 text-teal-400"></i>
+                                <span>উপলব্ধ ব্যাকআপ আর্কাইভ — <span id="backup-table-domain-name" class="text-teal-400 font-mono font-bold"></span></span>
+                            </h4>
+                            <span class="text-[11px] text-slate-400">🔒 শুধুমাত্র সক্রিয় ডোমেইনের ব্যাকআপ প্রদর্শিত হচ্ছে</span>
+                        </div>
                         <div class="overflow-x-auto rounded-xl border border-slate-800">
                             <table class="w-full text-left text-xs">
                                 <thead>
@@ -5419,6 +5430,9 @@
             if (push) {
                 updateBrowserUrl(`/tpanel?service_id=${selectedService.id}&view=${targetTab}`, `Tpanel - ${selectedService.domain} (${targetTab.toUpperCase()})`);
             }
+
+            // Reset any pending backup upload selection
+            if (typeof cancelBackupSelection === 'function') cancelBackupSelection();
 
             // Load specified Tab
             switchCpanelTab(targetTab, push);
@@ -8031,20 +8045,33 @@
         }
 
         // -------------------------------------------------------------
-        // BACKUP & RESTORE LOGIC
+        // BACKUP & RESTORE LOGIC (STRICT DOMAIN ISOLATION)
         // -------------------------------------------------------------
         async function loadBackupsList() {
             if (!selectedService) return;
+            const currentServiceId = selectedService.id;
+            const currentDomain = selectedService.domain;
+
+            // Update UI domain isolation badges
+            const badgeEl = document.getElementById('backup-current-domain-badge');
+            if (badgeEl) badgeEl.textContent = currentDomain;
+            const tblDomainEl = document.getElementById('backup-table-domain-name');
+            if (tblDomainEl) tblDomainEl.textContent = currentDomain;
+
             const tbody = document.getElementById('backups-list-tbody');
             if (!tbody) return;
 
-            tbody.innerHTML = `<tr><td colspan="5" class="py-6 text-center text-slate-500 font-sans"><div class="flex items-center justify-center gap-2"><div class="w-4 h-4 border-2 border-teal-500 border-t-transparent rounded-full animate-spin"></div><span>ব্যাকআপ লোড হচ্ছে...</span></div></td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="5" class="py-6 text-center text-slate-500 font-sans"><div class="flex items-center justify-center gap-2"><div class="w-4 h-4 border-2 border-teal-500 border-t-transparent rounded-full animate-spin"></div><span>"${currentDomain}" এর ব্যাকআপ লোড হচ্ছে...</span></div></td></tr>`;
 
             try {
-                const res = await fetch(`/api/cpanel/backup/list?serviceId=${selectedService.id}`, {
+                const res = await fetch(`/api/cpanel/backup/list?serviceId=${currentServiceId}`, {
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
                 const data = await res.json();
+                
+                // Guard: Discard results if user switched active domain while request was in-flight
+                if (!selectedService || selectedService.id !== currentServiceId) return;
+
                 const backups = data.backups || [];
 
                 const todayStatusPill = document.getElementById('auto-backup-status-pill');
@@ -8059,7 +8086,7 @@
                 }
 
                 if (backups.length === 0) {
-                    tbody.innerHTML = `<tr><td colspan="5" class="py-8 text-center text-slate-500 font-sans">এখনও কোনো ব্যাকআপ তৈরি করা হয়নি। উপরের বাটনগুলো দিয়ে সহজেই ব্যাকআপ তৈরি করুন।</td></tr>`;
+                    tbody.innerHTML = `<tr><td colspan="5" class="py-8 text-center text-slate-500 font-sans">"${currentDomain}" এর জন্য এখনও কোনো ব্যাকআপ তৈরি করা হয়নি। এই ডোমেইনের ব্যাকআপ সম্পূর্ণ আইসোলেটেড এবং অন্য কোনো ডোমেইনে দৃশ্যমান হবে না।</td></tr>`;
                     return;
                 }
 

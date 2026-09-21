@@ -3748,13 +3748,15 @@ async function getBackupDirectory(serviceId) {
     return dir;
 }
 
-// Multer storage for full backup uploads (supports large archives up to 4GB)
+// Multer storage for full backup uploads (strictly isolated by authenticated serviceId)
 const backupStorage = multer.diskStorage({
     destination: async (req, file, cb) => {
         try {
             const serviceId = req.query.serviceId || req.body.serviceId;
             if (!serviceId) return cb(new Error('serviceId is required for backup upload'));
-            const dir = path.join(BACKUP_BASE_DIR, String(serviceId));
+            const service = await getServiceForUser(serviceId, req.user);
+            if (!service) return cb(new Error('Unauthorized: Service does not exist or does not belong to your account'));
+            const dir = path.join(BACKUP_BASE_DIR, String(service.id));
             await fsp.mkdir(dir, { recursive: true, mode: 0o755 });
             cb(null, dir);
         } catch (e) {
@@ -3975,6 +3977,9 @@ app.get('/api/cpanel/backup/list', authMiddleware, async (req, res) => {
         const todayAutoBackup = backups.find(b => b.isAuto && b.filename.includes(todayDate));
 
         res.json({
+            success: true,
+            serviceId: service.id,
+            domain: service.domain,
             backups,
             todayAutoBackup: todayAutoBackup || null
         });
