@@ -1497,10 +1497,10 @@ app.post('/api/cpanel/files/chmod', authMiddleware, async (req, res) => {
     }
 });
 
-// 11. File Manager: Compress (ZIP)
+// 11. File Manager: Compress (ZIP & TAR.GZ)
 app.post('/api/cpanel/files/compress', authMiddleware, async (req, res) => {
     try {
-        const { serviceId, currentPath = '', files, zipName } = req.body;
+        const { serviceId, currentPath = '', files, zipName, format = 'zip' } = req.body;
         const service = await getServiceForUser(serviceId, req.user);
         if (!service) return res.status(404).json({ error: 'Service not found' });
 
@@ -1511,19 +1511,58 @@ app.post('/api/cpanel/files/compress', authMiddleware, async (req, res) => {
             return res.status(403).json({ error: 'Access denied' });
         }
 
-        const safeZipName = (zipName.endsWith('.zip') ? zipName : zipName + '.zip').replace(/[^a-zA-Z0-9._-]/g, '');
-        const filesList = files.map(f => `"${path.basename(f)}"`).join(' ');
+        if (!files || !Array.isArray(files) || files.length === 0) {
+            return res.status(400).json({ error: 'No files selected for compression' });
+        }
 
-        await execPromise(`cd "${workDir}" && zip -r "${safeZipName}" ${filesList}`);
-        await execPromise(`sudo chown www-data:www-data "${path.join(workDir, safeZipName)}" 2>/dev/null || true`);
+        let rawName = (zipName || 'archive').trim().replace(/[^a-zA-Z0-9._-]/g, '');
+        if (!rawName) rawName = 'archive';
 
-        res.json({ message: 'Compressed successfully', archive: safeZipName });
+        let ext = '.zip';
+        let cmd = '';
+
+        if (format === 'targz' || rawName.endsWith('.tar.gz') || rawName.endsWith('.tgz')) {
+            ext = '.tar.gz';
+            if (rawName.endsWith('.tar.gz')) rawName = rawName.slice(0, -7);
+            else if (rawName.endsWith('.tgz')) rawName = rawName.slice(0, -4);
+            const finalArchive = rawName + ext;
+            const filesList = files.map(f => `"${path.basename(f)}"`).join(' ');
+            cmd = `cd "${workDir}" && tar -czf "${finalArchive}" ${filesList}`;
+        } else if (format === 'tar' || rawName.endsWith('.tar')) {
+            ext = '.tar';
+            if (rawName.endsWith('.tar')) rawName = rawName.slice(0, -4);
+            const finalArchive = rawName + ext;
+            const filesList = files.map(f => `"${path.basename(f)}"`).join(' ');
+            cmd = `cd "${workDir}" && tar -cf "${finalArchive}" ${filesList}`;
+        } else {
+            ext = '.zip';
+            if (rawName.endsWith('.zip')) rawName = rawName.slice(0, -4);
+            const finalArchive = rawName + ext;
+            const filesList = files.map(f => `"${path.basename(f)}"`).join(' ');
+            cmd = `cd "${workDir}" && zip -r "${finalArchive}" ${filesList}`;
+        }
+
+        const finalFilename = rawName + ext;
+        const finalFilePath = path.join(workDir, finalFilename);
+
+        await execPromise(cmd);
+        await execPromise(`sudo chown www-data:www-data "${finalFilePath}" 2>/dev/null || true`);
+
+        const stat = await fsp.stat(finalFilePath);
+
+        res.json({
+            success: true,
+            message: `ফাইল সফলভাবে কম্প্রেস হয়েছে (${formatBytes(stat.size)})`,
+            archive: finalFilename,
+            sizeBytes: stat.size,
+            sizeFormatted: formatBytes(stat.size)
+        });
     } catch (err) {
         res.status(500).json({ error: 'Compression failed: ' + err.message });
     }
 });
 
-// 12. File Manager: Extract (Unzip)
+// 12. File Manager: Extract (Unzip & Untar)
 app.post('/api/cpanel/files/extract', authMiddleware, async (req, res) => {
     try {
         const { serviceId, archivePath, targetDir = '' } = req.body;
@@ -1538,11 +1577,36 @@ app.post('/api/cpanel/files/extract', authMiddleware, async (req, res) => {
             return res.status(403).json({ error: 'Access denied' });
         }
 
+        if (!fs.existsSync(fullArchivePath)) {
+            return res.status(404).json({ error: 'Archive file not found' });
+        }
+
         await fsp.mkdir(fullTargetDir, { recursive: true });
-        await execPromise(`unzip -o "${fullArchivePath}" -d "${fullTargetDir}"`);
+
+        const lower = fullArchivePath.toLowerCase();
+        let cmd = '';
+
+        if (lower.endsWith('.tar.gz') || lower.endsWith('.tgz')) {
+            cmd = `tar -xzf "${fullArchivePath}" -C "${fullTargetDir}"`;
+        } else if (lower.endsWith('.tar.bz2') || lower.endsWith('.tbz2')) {
+            cmd = `tar -xjf "${fullArchivePath}" -C "${fullTargetDir}"`;
+        } else if (lower.endsWith('.tar')) {
+            cmd = `tar -xf "${fullArchivePath}" -C "${fullTargetDir}"`;
+        } else if (lower.endsWith('.gz') && !lower.endsWith('.tar.gz')) {
+            const outName = path.basename(fullArchivePath, '.gz');
+            cmd = `gunzip -c "${fullArchivePath}" > "${path.join(fullTargetDir, outName)}"`;
+        } else {
+            // Default to unzip
+            cmd = `unzip -o "${fullArchivePath}" -d "${fullTargetDir}"`;
+        }
+
+        await execPromise(cmd);
         await execPromise(`sudo chown -R www-data:www-data "${fullTargetDir}" 2>/dev/null || true`);
 
-        res.json({ message: 'Extracted successfully' });
+        res.json({
+            success: true,
+            message: `আর্কাইভ সফলভাবে এক্সট্র্যাক্ট করা হয়েছে (${path.basename(fullArchivePath)})`
+        });
     } catch (err) {
         res.status(500).json({ error: 'Extraction failed: ' + err.message });
     }

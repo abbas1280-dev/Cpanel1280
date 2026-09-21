@@ -6191,8 +6191,9 @@
 
         function triggerExtractSelected() {
             const first = Array.from(fmSelectedItems)[0];
-            if (!first || (!first.endsWith('.zip') && !first.endsWith('.tar.gz'))) {
-                return showToast('Please select a ZIP or TAR archive to extract', 'error');
+            const isArchive = first && /\.(zip|tar\.gz|tgz|tar|tar\.bz2|gz)$/i.test(first);
+            if (!isArchive) {
+                return showToast('আনজিপ বা এক্সট্র্যাক্ট করতে একটি ZIP বা TAR আর্কাইভ নির্বাচন করুন', 'error');
             }
             extractArchive(first);
         }
@@ -6571,55 +6572,146 @@
             }
         }
 
-        // Compress / Extract
-        async function openCompressModal(files) {
-            const zipName = prompt('Enter name for the new compressed ZIP archive:', 'archive.zip');
-            if (!zipName) return;
+        // -------------------------------------------------------------
+        // FILE MANAGER: COMPRESS & EXTRACT MODALS
+        // -------------------------------------------------------------
+        let pendingCompressFiles = [];
+        let pendingExtractArchive = '';
+
+        function openCompressModal(files) {
+            if (!files || files.length === 0) {
+                return showToast('কম্প্রেস করতে এক বা একাধিক ফাইল বা ফোল্ডার নির্বাচন করুন', 'error');
+            }
+            pendingCompressFiles = files;
+            const countEl = document.getElementById('fm-compress-count-label');
+            if (countEl) {
+                countEl.textContent = `${files.length} টি আইটেম নির্বাচন করা হয়েছে`;
+            }
+            const nameInput = document.getElementById('fm-compress-name-input');
+            if (nameInput) {
+                let defaultName = 'archive';
+                if (files.length === 1) {
+                    defaultName = files[0].split('/').pop().replace(/\.[^/.]+$/, '');
+                }
+                nameInput.value = defaultName;
+            }
+            const modal = document.getElementById('fm-compress-modal');
+            if (modal) {
+                modal.classList.remove('hidden');
+                lucide.createIcons();
+            }
+        }
+
+        function closeCompressModal() {
+            const modal = document.getElementById('fm-compress-modal');
+            if (modal) modal.classList.add('hidden');
+            pendingCompressFiles = [];
+        }
+
+        async function submitCompressModal() {
+            if (!selectedService || pendingCompressFiles.length === 0) return;
+            const nameInput = document.getElementById('fm-compress-name-input');
+            const formatSelect = document.getElementById('fm-compress-format-select');
+            const zipName = nameInput ? nameInput.value.trim() : 'archive';
+            const format = formatSelect ? formatSelect.value : 'zip';
+
+            const btn = document.getElementById('fm-compress-submit-btn');
+            const origText = btn ? btn.innerHTML : '';
+            if (btn) {
+                btn.disabled = true;
+                btn.innerHTML = `<div class="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin"></div><span>কম্প্রেস হচ্ছে...</span>`;
+            }
 
             try {
-                showToast('Compressing files...', 'info');
+                showToast('ফাইল কম্প্রেস করা হচ্ছে...', 'info');
                 const res = await fetch('/api/cpanel/files/compress', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
                     body: JSON.stringify({
                         serviceId: selectedService.id,
                         currentPath: fmCurrentPath,
-                        files,
-                        zipName
+                        files: pendingCompressFiles,
+                        zipName,
+                        format
                     })
                 });
                 const data = await res.json();
-                if (!res.ok) throw new Error(data.error);
+                if (!res.ok) throw new Error(data.error || 'Compression failed');
 
-                showToast(data.message);
+                showToast(data.message || 'ফাইল সফলভাবে কম্প্রেস হয়েছে', 'success');
+                closeCompressModal();
+                fmSelectedItems.clear();
+                updateFmToolbarButtons();
                 loadFileBrowser(fmCurrentPath);
             } catch (err) {
                 showToast(err.message, 'error');
+            } finally {
+                if (btn) {
+                    btn.disabled = false;
+                    btn.innerHTML = origText;
+                }
             }
         }
 
-        async function extractArchive(archivePath) {
-            const targetDir = prompt('Enter target directory to extract files into:', fmCurrentPath || '');
-            if (targetDir === null) return;
+        function extractArchive(archivePath) {
+            if (!archivePath) return;
+            pendingExtractArchive = archivePath;
+            const filename = archivePath.split('/').pop();
+            const label = document.getElementById('fm-extract-filename-label');
+            if (label) label.textContent = filename;
+
+            const targetInput = document.getElementById('fm-extract-target-input');
+            if (targetInput) targetInput.value = fmCurrentPath || '';
+
+            const modal = document.getElementById('fm-extract-modal');
+            if (modal) {
+                modal.classList.remove('hidden');
+                lucide.createIcons();
+            }
+        }
+
+        function closeExtractModal() {
+            const modal = document.getElementById('fm-extract-modal');
+            if (modal) modal.classList.add('hidden');
+            pendingExtractArchive = '';
+        }
+
+        async function submitExtractModal() {
+            if (!selectedService || !pendingExtractArchive) return;
+            const targetInput = document.getElementById('fm-extract-target-input');
+            const targetDir = targetInput ? targetInput.value.trim() : (fmCurrentPath || '');
+
+            const btn = document.getElementById('fm-extract-submit-btn');
+            const origText = btn ? btn.innerHTML : '';
+            if (btn) {
+                btn.disabled = true;
+                btn.innerHTML = `<div class="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin"></div><span>এক্সট্র্যাক্ট হচ্ছে...</span>`;
+            }
 
             try {
-                showToast('Extracting archive...', 'info');
+                showToast('আর্কাইভ আনজিপ/এক্সট্র্যাক্ট হচ্ছে...', 'info');
                 const res = await fetch('/api/cpanel/files/extract', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
                     body: JSON.stringify({
                         serviceId: selectedService.id,
-                        archivePath,
+                        archivePath: pendingExtractArchive,
                         targetDir
                     })
                 });
                 const data = await res.json();
-                if (!res.ok) throw new Error(data.error);
+                if (!res.ok) throw new Error(data.error || 'Extraction failed');
 
-                showToast(data.message);
+                showToast(data.message || 'আর্কাইভ সফলভাবে এক্সট্র্যাক্ট করা হয়েছে', 'success');
+                closeExtractModal();
                 loadFileBrowser(fmCurrentPath);
             } catch (err) {
                 showToast(err.message, 'error');
+            } finally {
+                if (btn) {
+                    btn.disabled = false;
+                    btn.innerHTML = origText;
+                }
             }
         }
 
@@ -9119,6 +9211,75 @@ $mail->Port = 2525;`;
             <div class="flex justify-end gap-2 pt-2">
                 <button onclick="closeActionModal()" class="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-300">Cancel</button>
                 <button onclick="submitActionModal()" id="fm-action-modal-btn" class="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-xs font-semibold text-white">Save</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL: COMPRESS FILES (ZIP / TAR.GZ) -->
+    <div id="fm-compress-modal" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 hidden">
+        <div class="glass-card rounded-2xl w-full max-w-md p-6 border border-darkborder shadow-2xl space-y-4">
+            <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+                <h3 class="text-base font-bold text-white flex items-center gap-2">
+                    <i data-lucide="archive" class="w-4 h-4 text-purple-400"></i>
+                    <span>Compress Files (ফাইল জিপ/কম্প্রেস)</span>
+                </h3>
+                <button onclick="closeCompressModal()" class="text-slate-400 hover:text-white"><i data-lucide="x" class="w-5 h-5"></i></button>
+            </div>
+            <div class="space-y-3">
+                <div class="p-3 bg-purple-500/10 border border-purple-500/20 rounded-xl flex items-center justify-between">
+                    <span class="text-xs text-purple-300">নির্বাচিত আইটেম সংখ্যা:</span>
+                    <span id="fm-compress-count-label" class="font-bold text-xs text-purple-200">০ টি আইটেম</span>
+                </div>
+                <div>
+                    <label class="block text-xs text-slate-400 mb-1">আর্কাইভ ফাইলের নাম (Archive Name):</label>
+                    <input type="text" id="fm-compress-name-input" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-purple-500 font-mono" placeholder="archive">
+                </div>
+                <div>
+                    <label class="block text-xs text-slate-400 mb-1">কম্প্রেশন ফরম্যাট (Compression Type):</label>
+                    <select id="fm-compress-format-select" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-purple-500 font-mono">
+                        <option value="zip">📦 ZIP Archive (.zip) - সর্বজনীন ও স্ট্যান্ডার্ড</option>
+                        <option value="targz">🗜️ Tar GZip (.tar.gz) - সর্বাধিক কম্প্রেসড ও দ্রুত</option>
+                        <option value="tar">📁 Tar Archive (.tar) - আনকম্প্রেসড টারবক্স</option>
+                    </select>
+                </div>
+            </div>
+            <div class="flex justify-end gap-2 pt-2">
+                <button onclick="closeCompressModal()" class="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-300">Cancel</button>
+                <button onclick="submitCompressModal()" id="fm-compress-submit-btn" class="px-4 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-xs font-semibold text-white flex items-center gap-1.5 shadow-lg shadow-purple-600/20">
+                    <i data-lucide="archive" class="w-3.5 h-3.5"></i>
+                    <span>Compress Now</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL: EXTRACT ARCHIVE (UNZIP / UNTAR) -->
+    <div id="fm-extract-modal" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 hidden">
+        <div class="glass-card rounded-2xl w-full max-w-md p-6 border border-darkborder shadow-2xl space-y-4">
+            <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+                <h3 class="text-base font-bold text-white flex items-center gap-2">
+                    <i data-lucide="package-open" class="w-4 h-4 text-amber-400"></i>
+                    <span>Extract Archive (আনজিপ / এক্সট্র্যাক্ট)</span>
+                </h3>
+                <button onclick="closeExtractModal()" class="text-slate-400 hover:text-white"><i data-lucide="x" class="w-5 h-5"></i></button>
+            </div>
+            <div class="space-y-3">
+                <div class="p-3 bg-amber-500/10 border border-amber-500/20 rounded-xl">
+                    <span class="text-[11px] text-amber-400/80 block">নির্বাচিত আর্কাইভ ফাইল:</span>
+                    <span id="fm-extract-filename-label" class="font-mono text-xs font-bold text-amber-300 break-all">archive.zip</span>
+                </div>
+                <div>
+                    <label class="block text-xs text-slate-400 mb-1">এক্সট্র্যাক্ট করার গন্তব্য ফোল্ডার (Target Directory):</label>
+                    <input type="text" id="fm-extract-target-input" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-500 font-mono" placeholder="public_html">
+                    <p class="text-[10px] text-slate-500 mt-1">ফাঁকা রাখলে বর্তমান ফোল্ডারেই এক্সট্র্যাক্ট হবে।</p>
+                </div>
+            </div>
+            <div class="flex justify-end gap-2 pt-2">
+                <button onclick="closeExtractModal()" class="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-300">Cancel</button>
+                <button onclick="submitExtractModal()" id="fm-extract-submit-btn" class="px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-500 text-xs font-semibold text-white flex items-center gap-1.5 shadow-lg shadow-amber-600/20">
+                    <i data-lucide="package-open" class="w-3.5 h-3.5"></i>
+                    <span>Extract Files</span>
+                </button>
             </div>
         </div>
     </div>
