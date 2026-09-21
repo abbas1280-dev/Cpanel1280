@@ -257,14 +257,14 @@
             <div>
                 <h2 class="text-xl font-bold text-white flex items-center gap-2">
                     <i data-lucide="radio" class="w-5 h-5 text-cyan-400"></i>
-                    <span>ডিএনএস ও ৫টি পার্মানেন্ট ইমেইল রেকর্ড সেটআপ</span>
+                    <span>আপনার ডোমেনটি কি ক্লাউডফ্লেয়ারের সাথে যুক্ত আছে?</span>
                 </h2>
-                <p class="text-xs text-slate-400 mt-1">আপনার ডোমেনটি ক্লাউডফ্লেয়ারের মাধ্যমে স্বয়ংক্রিয়ভাবে সিঙ্ক করবেন নাকি ম্যানুয়ালি ডিএনএস বসাবেন?</p>
+                <p class="text-xs text-slate-400 mt-1">ডোমেন ক্লাউডফ্লেয়ারে যুক্ত থাকলে অটো-পাইলট স্বয়ংক্রিয়ভাবে DNS সিঙ্ক করবে, অথবা ম্যানুয়ালি ডিএনএস রেকর্ড বসাতে পারবেন:</p>
             </div>
 
             <!-- Provider Selection Grid -->
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <!-- Option 1: Cloudflare Auto-Pilot -->
+                <!-- Option 1: Cloudflare Auto-Pilot (Yes) -->
                 <div id="opt-cf" onclick="selectDnsOption('cloudflare')" class="p-5 rounded-2xl bg-slate-900/90 border-2 border-cyan-500 cursor-pointer transition relative">
                     <div class="absolute top-4 right-4 text-cyan-400">
                         <i data-lucide="check-circle-2" class="w-5 h-5"></i>
@@ -274,7 +274,7 @@
                             <i data-lucide="cloud" class="w-5 h-5"></i>
                         </div>
                         <div>
-                            <div class="text-sm font-bold text-white">Cloudflare Auto-Pilot</div>
+                            <div class="text-sm font-bold text-white">হ্যাঁ (Yes) — Cloudflare Auto-Pilot</div>
                             <div class="text-[11px] text-cyan-400 font-semibold">১-ক্লিকে ১০০% অটোমেশন (Recommended)</div>
                         </div>
                     </div>
@@ -283,14 +283,14 @@
                     </p>
                 </div>
 
-                <!-- Option 2: Manual DNS / Nameservers -->
+                <!-- Option 2: Manual DNS / Nameservers (No) -->
                 <div id="opt-manual" onclick="selectDnsOption('manual')" class="p-5 rounded-2xl bg-slate-900/50 border-2 border-slate-800 hover:border-slate-700 cursor-pointer transition relative">
                     <div class="flex items-center gap-3 mb-2">
                         <div class="w-10 h-10 rounded-xl bg-blue-500/10 text-blue-400 flex items-center justify-center font-bold">
                             <i data-lucide="list-plus" class="w-5 h-5"></i>
                         </div>
                         <div>
-                            <div class="text-sm font-bold text-white">Manual DNS / Nameservers</div>
+                            <div class="text-sm font-bold text-white">না (No) — Manual DNS / Nameservers</div>
                             <div class="text-[11px] text-slate-400">কাস্টম কপি-পেস্ট রেকর্ড</div>
                         </div>
                     </div>

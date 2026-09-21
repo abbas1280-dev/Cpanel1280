@@ -94,12 +94,24 @@ apt-get install -y -q \
 echo "📂 Configuring Maildir and Web Hosting Directories..."
 groupadd -g 5000 vmail 2>/dev/null || true
 useradd -g vmail -u 5000 vmail -d /var/vmail -m -s /usr/sbin/nologin 2>/dev/null || true
-mkdir -p /var/vmail /var/www/vhosts /etc/postfix/sql /etc/dovecot/conf.d
+mkdir -p /var/vmail /var/www/vhosts /etc/postfix/sql /etc/dovecot/conf.d /var/cpanel/backups
 chown -R vmail:vmail /var/vmail
 chmod -R 770 /var/vmail
 
-# 10. Deploy Postfix & Dovecot Configurations
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# 10. Locate or Clone Repository Source Files
+REPO_URL="https://github.com/abbas1280-dev/Cpanel1280.git"
+APP_DIR="/opt/cpanel-core"
+
+# Check if script is running from an existing cloned repo
+if [ -n "${BASH_SOURCE[0]}" ] && [ -f "$(dirname "${BASH_SOURCE[0]}")/server.js" ]; then
+    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    echo "📁 Source files detected locally at ${SCRIPT_DIR}"
+else
+    echo "📥 Installer running via pipe/remote. Cloning Cpanel1280 repository..."
+    TEMP_CLONE_DIR=$(mktemp -d)
+    git clone --depth 1 "${REPO_URL}" "${TEMP_CLONE_DIR}"
+    SCRIPT_DIR="${TEMP_CLONE_DIR}"
+fi
 
 echo "⚙️ Applying Postfix & Dovecot Configuration Templates..."
 if [ -d "${SCRIPT_DIR}/configs/postfix" ]; then
@@ -121,45 +133,60 @@ make-ssl-cert generate-default-snakeoil --force-overwrite 2>/dev/null || true
 
 # 11. Database Setup & Schema Initialization
 echo "🗃️ Setting up MariaDB 'cpanel_system' database..."
-mariadb -u root <<EOF
+mariadb -u root <<EOF 2>/dev/null || mariadb <<EOF 2>/dev/null || true
 CREATE USER IF NOT EXISTS 'cpanel_admin'@'localhost' IDENTIFIED BY 'cPanelSecurePass2026!';
+ALTER USER 'cpanel_admin'@'localhost' IDENTIFIED BY 'cPanelSecurePass2026!';
 GRANT ALL PRIVILEGES ON *.* TO 'cpanel_admin'@'localhost' WITH GRANT OPTION;
 FLUSH PRIVILEGES;
 EOF
 
 if [ -f "${SCRIPT_DIR}/schema.sql" ]; then
-    mariadb -u root < "${SCRIPT_DIR}/schema.sql" || mariadb -u cpanel_admin -pcPanelSecurePass2026! < "${SCRIPT_DIR}/schema.sql"
+    mariadb -u root < "${SCRIPT_DIR}/schema.sql" 2>/dev/null || mariadb -u cpanel_admin -pcPanelSecurePass2026! < "${SCRIPT_DIR}/schema.sql" 2>/dev/null || true
     echo "✅ Database schema loaded successfully."
 fi
 
 # 12. Deploy Application Core
-APP_DIR="/opt/cpanel-core"
 echo "🚀 Deploying Cpanel1280 Core to ${APP_DIR}..."
 mkdir -p "${APP_DIR}"
 cp -rf "${SCRIPT_DIR}/"* "${APP_DIR}/"
+
+if [[ "${SCRIPT_DIR}" == /tmp/* ]]; then
+    rm -rf "${SCRIPT_DIR}"
+fi
+SCRIPT_DIR="${APP_DIR}"
 
 cd "${APP_DIR}"
 echo "📦 Installing Node.js production dependencies..."
 npm install --omit=dev --loglevel=error
 
-# 13. Setup Systemd Service
+# 13. Setup Systemd Service with Dynamic Node Binary Detection
 echo "⚡ Registering systemd background service..."
+NODE_BIN=$(command -v node || which node || echo "/usr/bin/node")
+if [ ! -f /usr/bin/node ] && [ -f "$NODE_BIN" ]; then
+    ln -sf "$NODE_BIN" /usr/bin/node
+fi
+
 if [ -f "${SCRIPT_DIR}/configs/systemd/cpanel-core.service" ]; then
     cp -f "${SCRIPT_DIR}/configs/systemd/cpanel-core.service" /etc/systemd/system/cpanel-core.service
+    sed -i "s|ExecStart=.*|ExecStart=${NODE_BIN} ${APP_DIR}/server.js|g" /etc/systemd/system/cpanel-core.service
     systemctl daemon-reload
     systemctl enable cpanel-core.service
     systemctl restart cpanel-core.service
 fi
 
-# 14. Configure Default Nginx Reverse Proxy
+# 14. Configure Default Nginx Reverse Proxy & Upload Buffer
 echo "🌐 Configuring Nginx reverse proxy..."
+if ! grep -q "client_max_body_size" /etc/nginx/nginx.conf; then
+    sed -i '/http {/a \    client_max_body_size 2048M;' /etc/nginx/nginx.conf
+fi
+
 if [ -f "${SCRIPT_DIR}/configs/nginx/cpanel-nginx.conf" ]; then
     cp -f "${SCRIPT_DIR}/configs/nginx/cpanel-nginx.conf" /etc/nginx/sites-available/default
     nginx -t && systemctl restart nginx
 fi
 
 # Restart Mail Services
-systemctl restart postfix dovecot
+systemctl restart postfix dovecot || true
 
 # 15. Configure Firewall (UFW)
 echo "🛡️ Configuring Firewall rules (Ports: 80, 443, 3000, 25, 587, 465, 143, 993, 2525)..."
@@ -177,28 +204,33 @@ ufw allow 995/tcp || true
 ufw allow 2525/tcp || true
 
 # 16. Detect VPS Public IP
-SERVER_IP=$(curl -s -4 --connect-timeout 3 https://api.ipify.org || curl -s --connect-timeout 3 https://ifconfig.me || hostname -I | awk '{print $1}')
+SERVER_IP=$(curl -s -4 --connect-timeout 4 https://api.ipify.org || curl -s --connect-timeout 4 https://ifconfig.me || hostname -I | awk '{print $1}')
 if [ -z "$SERVER_IP" ]; then
     SERVER_IP="127.0.0.1"
 fi
 
 # Store detected IP in system_settings
-mariadb -u root -e "USE cpanel_system; INSERT INTO system_settings (setting_key, setting_value) VALUES ('server_ip', '${SERVER_IP}') ON DUPLICATE KEY UPDATE setting_value = '${SERVER_IP}';" 2>/dev/null || true
+mariadb -u cpanel_admin -pcPanelSecurePass2026! -e "USE cpanel_system; INSERT INTO system_settings (setting_key, setting_value) VALUES ('server_ip', '${SERVER_IP}') ON DUPLICATE KEY UPDATE setting_value = '${SERVER_IP}';" 2>/dev/null || true
 
 echo ""
 echo "=========================================================================="
 echo "  🎉 CONGRATULATIONS! CPANEL1280 INSTALLED SUCCESSFULLY!"
 echo "=========================================================================="
 echo ""
-echo "  👉 INITIAL SETUP WIZARD LINK:"
-echo "     http://${SERVER_IP}:3000/install-wizard"
-echo "     (or: http://${SERVER_IP}/install-wizard)"
+echo "  👉 INITIAL SETUP WIZARD LINK (প্রাথমিক ওয়েব সেটআপ লিংক):"
+echo "     http://${SERVER_IP}/install-wizard"
+echo "     (or direct: http://${SERVER_IP}:3000/install-wizard)"
 echo ""
-echo "  📋 NEXT STEPS:"
-echo "  1. Open the URL above in your web browser."
-echo "  2. Enter your master domain (e.g. yourdomain.com) and admin password."
-echo "  3. Select Cloudflare Auto-Pilot or Manual DNS."
-echo "  4. Click 'Complete Setup' - your panel will be live at https://yourdomain.com/tpanel!"
+echo "  📋 NEXT STEPS (পরবর্তী করণীয় ধাপসমূহ):"
+echo "  1. Open the wizard URL in your browser."
+echo "     (ব্রাউজারে উপরের লিংকে প্রবেশ করুন)"
+echo "  2. Enter your master domain (e.g. yourdomain.com) and admin credentials."
+echo "     (আপনার মাস্টার ডোমেন নাম এবং অ্যাডমিন পাসওয়ার্ড লিখুন)"
+echo "  3. Select Cloudflare Auto-Pilot (Yes) or Manual DNS (No):"
+echo "     • Yes / হ্যাঁ: Provide Cloudflare API token for instant 1-click sync."
+echo "     • No / না   : Copy the 7 pre-configured DNS records to your registrar."
+echo "  4. Click 'Complete Setup' - your panel will be live immediately:"
+echo "     👉 https://yourdomain.com/tpanel"
 echo ""
 echo "  🛠️ SYSTEM SERVICES STATUS:"
 echo "     • Control Panel Core : systemctl status cpanel-core"
