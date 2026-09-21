@@ -6,17 +6,18 @@
 
 ## 🚀 1-Command Automated VPS Installation (১-ক্লিক ইনস্টলেশন)
 
-যেকোনো ফ্রেশ **Ubuntu 20.04 / 22.04 / 24.04** অথবা **Debian 11 / 12** ভিপিএসে রুট ইউজার হিসেবে নিচের কমান্ডটি রান করুন:
-
-```bash
-git clone https://github.com/abbas1280-dev/Cpanel1280.git && cd Cpanel1280 && sudo bash install.sh
-```
-
-অথবা কার্ল (curl) দিয়ে সরাসরি ওয়ান-লাইনে ইনস্টল করতে পারেন:
-
+### মেথড ১ (সবচেয়ে সহজ ও রেকমেন্ডেড — সরাসরি ওয়ান-লাইন কার্ল ইনস্টলার):
+যেকোনো ফ্রেশ অথবা রানিং ভিপিএসে টার্মিনালে সরাসরি এই কমান্ডটি দিন:
 ```bash
 curl -sSL https://raw.githubusercontent.com/abbas1280-dev/Cpanel1280/main/install.sh | sudo bash
 ```
+
+### মেথড ২ (গিট ক্লোন মেথড — ফোল্ডার থাকলেও কোনো এরর দিবে না):
+```bash
+rm -rf Cpanel1280 && git clone https://github.com/abbas1280-dev/Cpanel1280.git && cd Cpanel1280 && sudo bash install.sh
+```
+
+*(অথবা ইতিমধ্যে ক্লোন করা থাকলে সরাসরি আপডেট ও রান করতে: `cd Cpanel1280 && git pull && sudo bash install.sh`)*
 
 ---
 
