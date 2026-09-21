@@ -23,28 +23,33 @@ curl -sSL https://raw.githubusercontent.com/abbas1280-dev/Cpanel1280/main/instal
 
 ## 🌟 ইনস্টলেশন পরবর্তী ওয়েব সেটআপ উইজার্ড (Web Setup Wizard)
 
-ইনস্টলেশন সম্পন্ন হওয়ার সাথে সাথে টার্মিনালে আপনাকে একটি কাস্টম ওয়েব উইজার্ড লিংক দেওয়া হবে:
+ইনস্টলেশন সম্পন্ন হওয়ার সাথে সাথে টার্মিনালে স্বয়ংক্রিয়ভাবে ক্লাউডফ্লেয়ার ইনস্ট্যান্ট অ্যাক্সেস লিংক দেওয়া হবে:
 
 ```text
 ==========================================================================
   🎉 CONGRATULATIONS! CPANEL1280 INSTALLED SUCCESSFULLY!
 ==========================================================================
 
-  👉 INITIAL SETUP WIZARD LINK:
-     http://<YOUR_VPS_IP>:3000/install-wizard
-     (or http://<YOUR_VPS_IP>/install-wizard)
+  👉 🌟 INSTANT CLOUDFLARE WIZARD LINK (যেকোনো VPS/NAT/স্যান্ডবক্সে ১-ক্লিকে ওপেন):
+     https://<unique-subdomain>.trycloudflare.com/install-wizard
+
+  👉 🌐 DIRECT IP LINK (সাধারণ ডেডিকেটেড VPS-এর জন্য):
+     http://<YOUR_VPS_IP>/install-wizard
 ==========================================================================
 ```
 
 ### ব্রাউজারে উইজার্ড ওপেন করে যা করবেন:
-1. **System Health Verification:** Nginx, MariaDB, Postfix এবং Dovecot সার্ভিসের লাইভ স্ট্যাটাস দেখতে পাবেন।
-2. **Master Domain & Admin Credentials:**
-   - আপনার প্রধান ডোমেইন নাম লিখুন (যেমন: `tamim1280.shop` বা `yourdomain.com`)।
+1. **Zero-Port Instant Access:** যেকোনো ডিভাইস/মোবাইল/পিসি থেকে উপরের ক্লাউডফ্লেয়ার লিংকে ক্লিক করলেই কোনো আইপি কনফ্লিক্ট বা 504 এরর ছাড়াই ১ সেকেন্ডে ফুল SSL সুরক্ষিত পেজ ওপেন হবে।
+2. **System Health Verification:** Nginx, MariaDB, Postfix এবং Dovecot সার্ভিসের লাইভ স্ট্যাটাস দেখতে পাবেন।
+3. **Master Domain & Admin Credentials:**
+   - আপনার প্রধান ডোমেইন নাম লিখুন (যেমন: `yourdomain.com`)।
    - অ্যাডমিন ইউজারনেম এবং সুরক্ষিত পাসওয়ার্ড দিন।
-3. **DNS Routing & Email Method:**
+4. **DNS Routing & Email Method:**
    - **অপশন ১ (Cloudflare Auto-Pilot):** আপনার Cloudflare API Token দিলে সার্ভার স্বয়ংক্রিয়ভাবে A রেকর্ড, CNAME এবং **৫টি পার্মানেন্ট ইমেইল রেকর্ড (MX, mail A, SPF, DKIM, DMARC)** ক্লাউডফ্লেয়ারে বসিয়ে দিবে। ম্যানুয়ালি কোনো কপি-পেস্ট করা লাগবে না!
    - **অপশন ২ (Manual DNS / Nameservers):** ক্লাউডফ্লেয়ার না থাকলে সার্ভার আপনাকে সবকটি ডিএনএস রেকর্ডের (2048-bit RSA DKIM সহ) রেডিমেড কপি ভ্যালু প্রদর্শন করবে যা যেকোনো ডোমেন প্যানেলে ১ ক্লিকে পেস্ট করতে পারবেন।
-4. **Final Launch:** সেটআপ বাটনে ক্লিক করামাত্রই আপনার কন্ট্রোল প্যানেল সরাসরি `https://yourdomain.com/tpanel`-এ লাইভ হয়ে যাবে!
+5. **Final Launch & Permanent Security Lock:**
+   - সেটআপ বাটনে ক্লিক করামাত্রই আপনার কন্ট্রোল প্যানেল সরাসরি `https://yourdomain.com/tpanel`-এ লাইভ হয়ে যাবে।
+   - **অস্থায়ী টানেলটি স্বয়ংক্রিয়ভাবে মুছে যাবে এবং `/install-wizard` পেজটি চিরতরে লক (404 Not Found) হয়ে যাবে**।
 
 ---
 

@@ -200,7 +200,57 @@ ufw allow 110/tcp || true
 ufw allow 995/tcp || true
 ufw allow 2525/tcp || true
 
-# 16. Detect VPS Public IP
+# 16. Install Cloudflare Tunnel Agent (cloudflared) for Zero-Port Instant Access
+echo "⚡ Setting up Cloudflare Tunnel Agent (cloudflared)..."
+if ! command -v cloudflared >/dev/null 2>&1; then
+    ARCH=$(dpkg --print-architecture 2>/dev/null || uname -m)
+    case "$ARCH" in
+        amd64|x86_64) CF_ARCH="amd64" ;;
+        arm64|aarch64) CF_ARCH="arm64" ;;
+        arm*) CF_ARCH="arm" ;;
+        *) CF_ARCH="amd64" ;;
+    esac
+    curl -fsSL "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-${CF_ARCH}" -o /usr/local/bin/cloudflared 2>/dev/null || true
+    chmod +x /usr/local/bin/cloudflared 2>/dev/null || true
+fi
+
+# 17. Launch Temporary Cloudflare Quick-Tunnel for Zero-Port Web Wizard
+CF_TUNNEL_URL=""
+if command -v cloudflared >/dev/null 2>&1; then
+    echo "🌐 Activating Cloudflare Instant Access Tunnel..."
+    mkdir -p /var/log
+    rm -f /var/log/cpanel-tunnel.log
+
+    cat << 'EOF' > /etc/systemd/system/cpanel-wizard-tunnel.service
+[Unit]
+Description=Cpanel1280 Cloudflare Temporary Setup Wizard Tunnel
+After=network.target cpanel-core.service
+
+[Service]
+Type=simple
+User=root
+ExecStart=/usr/local/bin/cloudflared tunnel --url http://127.0.0.1:3000 --logfile /var/log/cpanel-tunnel.log
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+    systemctl daemon-reload
+    systemctl enable cpanel-wizard-tunnel.service 2>/dev/null || true
+    systemctl restart cpanel-wizard-tunnel.service 2>/dev/null || true
+
+    for i in {1..12}; do
+        if [ -f /var/log/cpanel-tunnel.log ]; then
+            CF_TUNNEL_URL=$(grep -o 'https://[-a-zA-Z0-9]*\.trycloudflare\.com' /var/log/cpanel-tunnel.log | head -n 1 || true)
+            if [ -n "$CF_TUNNEL_URL" ]; then break; fi
+        fi
+        sleep 1
+    done
+fi
+
+# 18. Detect VPS Public IP
 SERVER_IP=$(curl -s -4 --connect-timeout 4 https://api.ipify.org || curl -s --connect-timeout 4 https://ifconfig.me || hostname -I | awk '{print $1}')
 if [ -z "$SERVER_IP" ]; then
     SERVER_IP="127.0.0.1"
@@ -214,13 +264,18 @@ echo "==========================================================================
 echo "  🎉 CONGRATULATIONS! CPANEL1280 INSTALLED SUCCESSFULLY!"
 echo "=========================================================================="
 echo ""
-echo "  👉 INITIAL SETUP WIZARD LINK (প্রাথমিক ওয়েব সেটআপ লিংক):"
+if [ -n "$CF_TUNNEL_URL" ]; then
+echo "  👉 🌟 INSTANT CLOUDFLARE WIZARD LINK (যেকোনো VPS/NAT/স্যান্ডবক্সে ১-ক্লিকে ওপেন):"
+echo "     ${CF_TUNNEL_URL}/install-wizard"
+echo ""
+fi
+echo "  👉 🌐 DIRECT IP LINK (সাধারণ ডেডিকেটেড VPS-এর জন্য):"
 echo "     http://${SERVER_IP}/install-wizard"
 echo "     (or direct: http://${SERVER_IP}:3000/install-wizard)"
 echo ""
 echo "  📋 NEXT STEPS (পরবর্তী করণীয় ধাপসমূহ):"
-echo "  1. Open the wizard URL in your browser."
-echo "     (ব্রাউজারে উপরের লিংকে প্রবেশ করুন)"
+echo "  1. Open the instant Cloudflare wizard link in your browser."
+echo "     (যেকোনো ব্রাউজারে উপরের ক্লাউডফ্লেয়ার ইনস্ট্যান্ট লিংকে প্রবেশ করুন)"
 echo "  2. Enter your master domain (e.g. yourdomain.com) and admin credentials."
 echo "     (আপনার মাস্টার ডোমেন নাম এবং অ্যাডমিন পাসওয়ার্ড লিখুন)"
 echo "  3. Select Cloudflare Auto-Pilot (Yes) or Manual DNS (No):"
@@ -228,6 +283,7 @@ echo "     • Yes / হ্যাঁ: Provide Cloudflare API token for instant 1
 echo "     • No / না   : Copy the 7 pre-configured DNS records to your registrar."
 echo "  4. Click 'Complete Setup' - your panel will be live immediately:"
 echo "     👉 https://yourdomain.com/tpanel"
+echo "     (সেটআপ সম্পন্ন হওয়ামাত্র উইজার্ডটি স্বয়ংক্রিয়ভাবে চিরতরে লক হয়ে যাবে)"
 echo ""
 echo "  🛠️ SYSTEM SERVICES STATUS:"
 echo "     • Control Panel Core : systemctl status cpanel-core"

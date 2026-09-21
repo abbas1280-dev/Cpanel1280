@@ -3763,6 +3763,11 @@ server {
         await pool.query("INSERT INTO system_settings (setting_key, setting_value) VALUES ('master_domain', ?) ON DUPLICATE KEY UPDATE setting_value = ?", [cleanDomain, cleanDomain]);
         await pool.query("INSERT INTO system_settings (setting_key, setting_value) VALUES ('server_ip', ?) ON DUPLICATE KEY UPDATE setting_value = ?", [serverIp, serverIp]);
 
+        // Auto-stop and disable temporary wizard tunnel once installed
+        try {
+            await execPromise('systemctl stop cpanel-wizard-tunnel.service 2>/dev/null && systemctl disable cpanel-wizard-tunnel.service 2>/dev/null');
+        } catch (tErr) {}
+
         // 8. Sign JWT Admin Token
         const token = jwt.sign(
             { id: userId, username: adminUsername, email: cleanEmail, role: 'admin' },
