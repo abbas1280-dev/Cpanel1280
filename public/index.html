@@ -2222,6 +2222,12 @@
                         <span>DOMAINS</span>
                     </button>
 
+                    <!-- CRON JOBS -->
+                    <button onclick="switchCpanelTab('cron')" id="tab-cron" class="cpanel-tab-btn px-3 sm:px-4 py-2 rounded-xl flex items-center gap-2 whitespace-nowrap transition text-slate-300 hover:text-white hover:bg-white/10">
+                        <i data-lucide="clock" class="w-4 h-4 text-amber-400"></i>
+                        <span>CRON JOBS</span>
+                    </button>
+
                     <!-- SOFTWARE -->
                     <button onclick="switchCpanelTab('php')" id="tab-php" class="cpanel-tab-btn px-3 sm:px-4 py-2 rounded-xl flex items-center gap-2 whitespace-nowrap transition text-slate-300 hover:text-white hover:bg-white/10">
                         <i data-lucide="cpu" class="w-4 h-4 text-pink-400"></i>
@@ -2294,7 +2300,7 @@
                         </div>
                         <span class="text-xs text-slate-400">টি প্যানেল কোর শর্টকাটস</span>
                     </div>
-                    <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+                    <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-3">
                         <!-- File Manager Quick Card -->
                         <div onclick="switchCpanelTab('files')" class="group p-4 rounded-xl bg-slate-900/60 hover:bg-amber-500/10 border border-slate-800 hover:border-amber-500/40 cursor-pointer transition flex flex-col items-center text-center">
                             <div class="w-10 h-10 rounded-xl bg-amber-500/10 text-amber-400 group-hover:scale-110 flex items-center justify-center transition mb-2">
@@ -2347,6 +2353,15 @@
                             </div>
                             <span class="text-xs font-bold text-white group-hover:text-cyan-300 transition">SSL / Security</span>
                             <span class="text-[10px] text-slate-400 mt-0.5">সিকিউরিটি ও সার্টিফিকেট</span>
+                        </div>
+
+                        <!-- Cron Jobs Quick Card -->
+                        <div onclick="switchCpanelTab('cron')" class="group p-4 rounded-xl bg-slate-900/60 hover:bg-amber-500/10 border border-slate-800 hover:border-amber-500/40 cursor-pointer transition flex flex-col items-center text-center">
+                            <div class="w-10 h-10 rounded-xl bg-amber-500/10 text-amber-400 group-hover:scale-110 flex items-center justify-center transition mb-2">
+                                <i data-lucide="clock" class="w-5 h-5"></i>
+                            </div>
+                            <span class="text-xs font-bold text-white group-hover:text-amber-300 transition">Cron Jobs</span>
+                            <span class="text-[10px] text-slate-400 mt-0.5">অটোমেটেড শিডিউল</span>
                         </div>
                     </div>
                 </div>
@@ -3592,7 +3607,7 @@
                     </div>
 
                     <div class="text-[11px] text-slate-400 font-mono text-left space-y-1.5 bg-slate-950 p-3 rounded-lg border border-slate-800/80">
-                        <div id="cf-step-1" class="flex items-center gap-2 text-slate-400"><span>⏳</span> <span>১. CNAME & TXT রেকর্ড ক্লাউডফ্ল্যারে পুশ করা</span></div>
+                        <div id="cf-step-1" class="flex items-center gap-2 text-slate-400"><span>⏳</span> <span>১. ওয়েবসাইট ও ৫টি ইমেইল রেকর্ড (MX, mail A, SPF, DKIM, DMARC) ক্লাউডফ্ল্যারে যুক্তকরণ</span></div>
                         <div id="cf-step-2" class="flex items-center gap-2 text-slate-500"><span>⏳</span> <span>২. ক্লাউড এজ এসএসএল ভেরিফিকেশন ও রাউটিং লক</span></div>
                         <div id="cf-step-3" class="flex items-center gap-2 text-slate-500"><span>⏳</span> <span>৩. ক্লাউডফ্ল্যার থেকে ওয়ান-টাইম TXT রেকর্ড স্বয়ংক্রিয় ডিলিট</span></div>
                     </div>
@@ -5175,8 +5190,8 @@
             }
 
             // Hide all tab views
-            document.querySelectorAll('.cpanel-view').forEach(v => v.classList.add('hidden'));
-            const activeView = document.getElementById(`cpanel-tab-content-${tabName}`);
+            document.querySelectorAll('.cpanel-view, .tpanel-view').forEach(v => v.classList.add('hidden'));
+            const activeView = document.getElementById(`tpanel-tab-content-${tabName}`) || document.getElementById(`cpanel-tab-content-${tabName}`);
             if (activeView) activeView.classList.remove('hidden');
 
             // Handle Fullscreen File Manager View
@@ -7364,7 +7379,7 @@
 
                 // Step 1 Done
                 const step1 = document.getElementById('cf-step-1');
-                if (step1) step1.innerHTML = `<span class="text-emerald-400">✔️</span> <span class="text-white">১. CNAME ও TXT রেকর্ড ক্লাউডফ্ল্যারে যুক্ত হয়েছে!</span>`;
+                if (step1) step1.innerHTML = `<span class="text-emerald-400">✔️</span> <span class="text-white">১. ওয়েবসাইট ও ৫টি ইমেইল রেকর্ড (MX, mail A, SPF, DKIM, DMARC) ক্লাউডফ্ল্যারে যুক্ত হয়েছে!</span>`;
 
                 // Start 30s countdown
                 let secondsLeft = 30;
