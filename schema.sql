@@ -34,10 +34,9 @@ CREATE TABLE IF NOT EXISTS services (
 CREATE TABLE IF NOT EXISTS subdomains (
     id INT AUTO_INCREMENT PRIMARY KEY,
     service_id INT NOT NULL,
-    subdomain VARCHAR(100) NOT NULL,
-    full_domain VARCHAR(255) NOT NULL UNIQUE,
-    document_root VARCHAR(255) NOT NULL,
-    php_version VARCHAR(10) DEFAULT '8.2',
+    subdomain VARCHAR(255) NOT NULL,
+    doc_root VARCHAR(255) NOT NULL,
+    php_version VARCHAR(20) DEFAULT '8.2',
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     INDEX idx_service_id (service_id),
     CONSTRAINT fk_subdomains_service FOREIGN KEY (service_id) REFERENCES services(id) ON DELETE CASCADE

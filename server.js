@@ -3761,7 +3761,7 @@ app.post('/api/cpanel/backup/create', authMiddleware, async (req, res) => {
         // C. Metadata
         const [emails] = await pool.query('SELECT email_user, full_email, quota_mb FROM email_accounts WHERE service_id = ?', [service.id]);
         const [crons] = await pool.query('SELECT schedule, command FROM cron_jobs WHERE service_id = ?', [service.id]);
-        const [subs] = await pool.query('SELECT subdomain, full_domain, document_root, php_version FROM subdomains WHERE service_id = ?', [service.id]);
+        const [subs] = await pool.query('SELECT subdomain, doc_root, php_version FROM subdomains WHERE service_id = ?', [service.id]);
 
         const metadata = {
             serviceId: service.id,
