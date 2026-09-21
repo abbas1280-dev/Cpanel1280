@@ -3413,11 +3413,53 @@ app.get(['/api/cpanel/email/deliverability', '/api/tpanel/email/deliverability']
 // =================================================================
 // ZERO-TOUCH INITIAL SETUP WIZARD & FIRST-TIME CONFIGURATION API
 // =================================================================
+// ZERO-TOUCH INITIAL SETUP WIZARD & FIRST-TIME CONFIGURATION API
+// =================================================================
 
-// Serve setup wizard
-app.get('/install-wizard', (req, res) => {
+// Security Guard: Permanent Lockout after Installation
+async function checkInstallerLocked(req, res, next) {
+    try {
+        const [rows] = await pool.query("SELECT setting_value FROM system_settings WHERE setting_key = 'installed' LIMIT 1");
+        if (rows.length > 0 && rows[0].setting_value === 'true') {
+            if (req.path.startsWith('/api/')) {
+                return res.status(403).json({ error: 'ইনস্টলেশন ইতিমধ্যে সম্পন্ন হয়েছে। সিকিউরিটির জন্য সেটআপ উইজার্ড স্থায়ীভাবে বন্ধ করা হয়েছে।' });
+            }
+            return res.status(404).send(`
+                <!DOCTYPE html>
+                <html lang="bn">
+                <head>
+                    <meta charset="UTF-8">
+                    <title>404 - Not Found</title>
+                    <style>
+                        body { background: #070b14; color: #94a3b8; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; text-align: center; }
+                        .box { background: #0d1527; padding: 40px; border-radius: 16px; border: 1px solid #1e293b; max-width: 480px; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5); }
+                        h1 { color: #f43f5e; font-size: 36px; margin: 0 0 10px 0; }
+                        p { font-size: 15px; line-height: 1.6; margin-bottom: 24px; color: #cbd5e1; }
+                        a { display: inline-block; background: #06b6d4; color: #070b14; font-weight: 600; padding: 10px 24px; border-radius: 8px; text-decoration: none; transition: opacity 0.2s; }
+                        a:hover { opacity: 0.9; }
+                    </style>
+                </head>
+                <body>
+                    <div class="box">
+                        <h1>404 Not Found</h1>
+                        <p>এই সার্ভারে সিপ্যানেল সেটআপ ইতিমধ্যে সফলভাবে সম্পন্ন হয়েছে। সার্ভার নিরাপত্তার স্বার্থে প্রাথমিক সেটআপ উইজার্ডটি স্থায়ীভাবে বন্ধ করে দেওয়া হয়েছে।</p>
+                        <a href="/tpanel">লগইন প্যানেলে যান</a>
+                    </div>
+                </body>
+                </html>
+            `);
+        }
+    } catch (e) {}
+    next();
+}
+
+// Serve setup wizard (Auto-locked if already installed)
+app.get('/install-wizard', checkInstallerLocked, (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'install-wizard.html'));
 });
+
+// Protect all /api/installer routes with lockout
+app.use('/api/installer', checkInstallerLocked);
 
 // GET System Health & Installation Status
 app.get('/api/installer/status', async (req, res) => {
