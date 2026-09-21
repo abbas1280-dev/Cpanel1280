@@ -339,6 +339,15 @@ async function initDB() {
             )
         `);
 
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS hub_setup_sessions (
+                session_id VARCHAR(64) PRIMARY KEY,
+                target_url TEXT NOT NULL,
+                server_ip VARCHAR(50),
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+        `);
+
         console.log('MariaDB cpanel_system database tables verified successfully.');
     } catch (err) {
         console.error('Error initializing database:', err);
@@ -3462,7 +3471,96 @@ async function checkInstallerLocked(req, res, next) {
     next();
 }
 
-// Serve setup wizard (Auto-locked if already installed)
+// =================================================================
+// IN-HOUSE BRANDED TPANEL ROUTING & HUB ENGINE
+// =================================================================
+
+// 1. Register a new remote VPS setup session with branded URL
+app.post('/api/hub/register-session', async (req, res) => {
+    try {
+        const { sessionId, targetUrl, serverIp } = req.body;
+        if (!sessionId || !targetUrl) {
+            return res.status(400).json({ error: 'sessionId and targetUrl required' });
+        }
+        await pool.query(
+            'INSERT INTO hub_setup_sessions (session_id, target_url, server_ip) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE target_url = ?, server_ip = ?, created_at = NOW()',
+            [sessionId, targetUrl, serverIp || '', targetUrl, serverIp || '']
+        );
+        res.json({
+            success: true,
+            sessionId,
+            brandedUrl: `https://hoster1280.shop/tpanel-setup/${sessionId}`
+        });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// 2. Close/clean up a completed setup session
+app.post('/api/hub/close-session', async (req, res) => {
+    try {
+        const { sessionId } = req.body;
+        if (sessionId) {
+            await pool.query('DELETE FROM hub_setup_sessions WHERE session_id = ?', [sessionId]);
+        }
+        res.json({ success: true });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// 3. Dynamic Branded Hub Setup Router (Zero Cloudflare in browser URL)
+app.get('/tpanel-setup/:sessionId', async (req, res) => {
+    const { sessionId } = req.params;
+    try {
+        const [rows] = await pool.query('SELECT * FROM hub_setup_sessions WHERE session_id = ? LIMIT 1', [sessionId]);
+        if (rows.length === 0) {
+            return res.status(404).send(`
+                <!DOCTYPE html>
+                <html lang="bn">
+                <head>
+                    <meta charset="UTF-8">
+                    <title>404 - Session Expired</title>
+                    <style>
+                        body { background: #070b14; color: #94a3b8; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; text-align: center; }
+                        .box { background: #0d1527; padding: 40px; border-radius: 16px; border: 1px solid #1e293b; max-width: 480px; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5); }
+                        h1 { color: #f43f5e; font-size: 32px; margin: 0 0 10px 0; }
+                        p { font-size: 15px; line-height: 1.6; color: #cbd5e1; }
+                    </style>
+                </head>
+                <body>
+                    <div class="box">
+                        <h1>404 Session Closed</h1>
+                        <p>এই সেটআপ সেশনটি ইতিমধ্যে সফলভাবে সম্পন্ন হয়েছে অথবা মেয়াদোত্তীর্ণ হয়ে গেছে।</p>
+                    </div>
+                </body>
+                </html>
+            `);
+        }
+        const targetUrl = rows[0].target_url;
+        return res.send(`
+            <!DOCTYPE html>
+            <html lang="bn">
+            <head>
+                <meta charset="UTF-8">
+                <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                <title>Cpanel1280 ⚡ Cloud Setup Wizard</title>
+                <style>
+                    html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: #070b14; }
+                    iframe { width: 100%; height: 100%; border: none; }
+                </style>
+            </head>
+            <body>
+                <iframe src="${targetUrl}" allow="clipboard-read; clipboard-write; fullscreen"></iframe>
+            </body>
+            </html>
+        `);
+    } catch (err) {
+        res.status(500).send('Hub Router Error: ' + err.message);
+    }
+});
+
+// Serve local setup wizard (Auto-locked if already installed)
 app.get(['/tpanel-setup', '/install-wizard'], checkInstallerLocked, (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'install-wizard.html'));
 });
@@ -3767,6 +3865,19 @@ server {
         try {
             await execPromise('systemctl stop cpanel-wizard-tunnel.service 2>/dev/null && systemctl disable cpanel-wizard-tunnel.service 2>/dev/null');
         } catch (tErr) {}
+
+        // Notify master hub to close the branded setup session
+        try {
+            const [sessRows] = await pool.query("SELECT setting_value FROM system_settings WHERE setting_key = 'setup_session_id' LIMIT 1");
+            if (sessRows.length > 0 && sessRows[0].setting_value) {
+                const sId = sessRows[0].setting_value;
+                await fetch('https://hoster1280.shop/api/hub/close-session', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ sessionId: sId })
+                }).catch(() => {});
+            }
+        } catch (sErr) {}
 
         // 8. Sign JWT Admin Token
         const token = jwt.sign(

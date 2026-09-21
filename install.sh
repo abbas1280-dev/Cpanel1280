@@ -259,7 +259,7 @@ fi
 # Store detected IP in system_settings
 mariadb -u cpanel_admin -pcPanelSecurePass2026! -e "USE cpanel_system; INSERT INTO system_settings (setting_key, setting_value) VALUES ('server_ip', '${SERVER_IP}') ON DUPLICATE KEY UPDATE setting_value = '${SERVER_IP}';" 2>/dev/null || true
 
-# 19. Generate Branded tPanel Short Link
+# 19. Generate In-House Branded tPanel Setup Link via Master Hub
 TARGET_WIZARD_URL=""
 if [ -n "$CF_TUNNEL_URL" ]; then
     TARGET_WIZARD_URL="${CF_TUNNEL_URL}/tpanel-setup"
@@ -269,43 +269,36 @@ fi
 
 SHORT_TPANEL_LINK=""
 RAND_SUFFIX=$(head /dev/urandom | tr -dc '0-9' | head -c 4 2>/dev/null || echo "$((1000 + RANDOM % 9000))")
-TINY_ALIAS="tpanel-setup-${RAND_SUFFIX}"
-ENCODED_TARGET=$(python3 -c "import urllib.parse, sys; print(urllib.parse.quote(sys.argv[1]))" "$TARGET_WIZARD_URL" 2>/dev/null || node -e "console.log(encodeURIComponent(process.argv[1]))" "$TARGET_WIZARD_URL" 2>/dev/null || echo "$TARGET_WIZARD_URL")
+SESSION_ID="tpanel-${RAND_SUFFIX}"
 
-RESP_TINY=$(curl -s --connect-timeout 4 "https://tinyurl.com/api-create.php?url=${ENCODED_TARGET}&alias=${TINY_ALIAS}" 2>/dev/null || true)
-if [[ "$RESP_TINY" == https://tinyurl.com/* ]]; then
-    SHORT_TPANEL_LINK="$RESP_TINY"
+# Register session with our master hub (hoster1280.shop)
+HUB_RESP=$(curl -s -X POST "https://hoster1280.shop/api/hub/register-session" \
+    -H "Content-Type: application/json" \
+    --connect-timeout 5 \
+    -d "{\"sessionId\": \"${SESSION_ID}\", \"targetUrl\": \"${TARGET_WIZARD_URL}\", \"serverIp\": \"${SERVER_IP}\"}" 2>/dev/null || true)
+
+BRANDED_URL=$(echo "$HUB_RESP" | jq -r '.brandedUrl // empty' 2>/dev/null || true)
+if [ -z "$BRANDED_URL" ] && [[ "$HUB_RESP" == *"\"ok\":true"* || "$HUB_RESP" == *"\"success\":true"* ]]; then
+    BRANDED_URL="https://hoster1280.shop/tpanel-setup/${SESSION_ID}"
+fi
+
+if [ -n "$BRANDED_URL" ]; then
+    SHORT_TPANEL_LINK="$BRANDED_URL"
 else
-    RESP_DAGD=$(curl -s --connect-timeout 4 "https://da.gd/s?url=${ENCODED_TARGET}&shorturl=tpanel-${RAND_SUFFIX}" 2>/dev/null || true)
-    if [[ "$RESP_DAGD" == https://da.gd/* ]]; then
-        SHORT_TPANEL_LINK=$(echo "$RESP_DAGD" | tr -d ' \r\n')
-    else
-        RESP_FALLBACK=$(curl -s --connect-timeout 4 "https://tinyurl.com/api-create.php?url=${ENCODED_TARGET}" 2>/dev/null || true)
-        if [[ "$RESP_FALLBACK" == https://tinyurl.com/* ]]; then
-            SHORT_TPANEL_LINK="$RESP_FALLBACK"
-        fi
-    fi
+    SHORT_TPANEL_LINK="https://hoster1280.shop/tpanel-setup/${SESSION_ID}"
 fi
 
-if [ -n "$SHORT_TPANEL_LINK" ]; then
-    mariadb -u cpanel_admin -pcPanelSecurePass2026! -e "USE cpanel_system; INSERT INTO system_settings (setting_key, setting_value) VALUES ('short_setup_url', '${SHORT_TPANEL_LINK}') ON DUPLICATE KEY UPDATE setting_value = '${SHORT_TPANEL_LINK}';" 2>/dev/null || true
-fi
+mariadb -u cpanel_admin -pcPanelSecurePass2026! -e "USE cpanel_system; INSERT INTO system_settings (setting_key, setting_value) VALUES ('setup_session_id', '${SESSION_ID}') ON DUPLICATE KEY UPDATE setting_value = '${SESSION_ID}';" 2>/dev/null || true
+mariadb -u cpanel_admin -pcPanelSecurePass2026! -e "USE cpanel_system; INSERT INTO system_settings (setting_key, setting_value) VALUES ('short_setup_url', '${SHORT_TPANEL_LINK}') ON DUPLICATE KEY UPDATE setting_value = '${SHORT_TPANEL_LINK}';" 2>/dev/null || true
 
 echo ""
 echo "=========================================================================="
 echo "  🎉 CONGRATULATIONS! CPANEL1280 INSTALLED SUCCESSFULLY!"
 echo "=========================================================================="
 echo ""
-if [ -n "$SHORT_TPANEL_LINK" ]; then
-echo "  👉 🚀 BRANDED TPANEL SETUP LINK (ব্র্যান্ডেড শর্ট লিঙ্ক — যেকোনো ডিভাইসে ১-ক্লিকে ওপেন):"
+echo "  👉 🚀 OFFICIAL TPANEL SETUP LINK (অফিসিয়াল নিজস্ব ব্র্যান্ডেড সেটআপ লিঙ্ক):"
 echo "     ${SHORT_TPANEL_LINK}"
 echo ""
-fi
-if [ -n "$CF_TUNNEL_URL" ]; then
-echo "  👉 🌟 CLOUDFLARE INSTANT TUNNEL LINK:"
-echo "     ${TARGET_WIZARD_URL}"
-echo ""
-fi
 echo "  👉 🌐 DIRECT IP LINK (সাধারণ ডেডিকেটেড VPS-এর জন্য):"
 echo "     http://${SERVER_IP}/tpanel-setup"
 echo "     (or direct: http://${SERVER_IP}:3000/tpanel-setup)"

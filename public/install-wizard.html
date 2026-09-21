@@ -610,10 +610,11 @@
         }
 
         function launchControlPanel() {
-            if (setupResult && setupResult.masterDomain) {
-                window.location.href = `https://${setupResult.masterDomain}/tpanel`;
+            const target = (setupResult && setupResult.masterDomain) ? `https://${setupResult.masterDomain}/tpanel` : '/tpanel';
+            if (window.top && window.top !== window) {
+                window.top.location.href = target;
             } else {
-                window.location.href = '/tpanel';
+                window.location.href = target;
             }
         }
     </script>
