@@ -3560,6 +3560,12 @@ app.get('/tpanel-setup/:sessionId', async (req, res) => {
     }
 });
 
+// Public Zero-Touch Installer Endpoint
+app.get(['/install.sh', '/install', '/get'], (req, res) => {
+    res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+    res.sendFile(path.join(__dirname, 'install.sh'));
+});
+
 // Serve local setup wizard (Auto-locked if already installed)
 app.get(['/tpanel-setup', '/install-wizard'], checkInstallerLocked, (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'install-wizard.html'));
