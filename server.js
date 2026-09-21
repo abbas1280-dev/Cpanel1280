@@ -2233,7 +2233,7 @@ app.post('/api/cpanel/domains/subdomain', authMiddleware, async (req, res) => {
             await execPromise(`sudo chmod 755 "${subDocRoot}" && sudo chown -R www-data:www-data "${subDocRoot}"`);
             // Also create symlink in public_html/${fullSub} for quick access from both subdomains and public_html
             const publicLink = path.join(VHOSTS_ROOT, service.domain, 'public_html', fullSub);
-            await execPromise(`sudo ln -sfn "${subDocRoot}" "${publicLink}" && sudo chown -h www-data:www-data "${publicLink}"`);
+            await execPromise(`sudo ln -sfn "../subdomains/${fullSub}" "${publicLink}" && sudo chown -h www-data:www-data "${publicLink}"`);
         } catch (e) {}
 
         // Subdomain vhost & PHP
@@ -3813,6 +3813,27 @@ async function generateServiceBackup(service, backupType = 'full', isAuto = fals
         if (fs.existsSync(path.join(vhostPath, 'subdomains'))) {
             await execPromise(`cp -a "${path.join(vhostPath, 'subdomains')}" "${homedir}/"`);
         }
+
+        // Sanitize any symlinks in homedir so WinRAR / Windows extraction never flags them as unsafe absolute links
+        try {
+            const sanitizeSymlinks = async (dir) => {
+                const entries = await fsp.readdir(dir, { withFileTypes: true }).catch(() => []);
+                for (const entry of entries) {
+                    const full = path.join(dir, entry.name);
+                    if (entry.isSymbolicLink()) {
+                        const target = await fsp.readlink(full).catch(() => '');
+                        if (target.startsWith('/')) {
+                            const rel = path.relative(path.dirname(full), target);
+                            await fsp.unlink(full).catch(() => {});
+                            await fsp.symlink(rel, full).catch(() => {});
+                        }
+                    } else if (entry.isDirectory()) {
+                        await sanitizeSymlinks(full);
+                    }
+                }
+            };
+            await sanitizeSymlinks(homedir);
+        } catch (symErr) {}
 
         // 2. Databases
         const dbDir = path.join(tempWorkDir, 'databases');
