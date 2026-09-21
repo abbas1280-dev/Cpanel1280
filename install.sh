@@ -272,10 +272,11 @@ RAND_SUFFIX=$(head /dev/urandom | tr -dc '0-9' | head -c 4 2>/dev/null || echo "
 SESSION_ID="tpanel-${RAND_SUFFIX}"
 
 # Register session with our master hub (hoster1280.shop)
+HUB_PAYLOAD=$(printf '{"sessionId":"%s","targetUrl":"%s","serverIp":"%s"}' "$SESSION_ID" "$TARGET_WIZARD_URL" "$SERVER_IP")
 HUB_RESP=$(curl -s -X POST "https://hoster1280.shop/api/hub/register-session" \
     -H "Content-Type: application/json" \
     --connect-timeout 5 \
-    -d "{\"sessionId\": \"${SESSION_ID}\", \"targetUrl\": \"${TARGET_WIZARD_URL}\", \"serverIp\": \"${SERVER_IP}\"}" 2>/dev/null || true)
+    -d "$HUB_PAYLOAD" 2>/dev/null || true)
 
 BRANDED_URL=$(echo "$HUB_RESP" | jq -r '.brandedUrl // empty' 2>/dev/null || true)
 if [ -z "$BRANDED_URL" ] && [[ "$HUB_RESP" == *"\"ok\":true"* || "$HUB_RESP" == *"\"success\":true"* ]]; then
