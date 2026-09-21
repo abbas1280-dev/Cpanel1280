@@ -133,15 +133,12 @@ make-ssl-cert generate-default-snakeoil --force-overwrite 2>/dev/null || true
 
 # 11. Database Setup & Schema Initialization
 echo "🗃️ Setting up MariaDB 'cpanel_system' database..."
-mariadb -u root <<EOF 2>/dev/null || mariadb <<EOF 2>/dev/null || true
-CREATE USER IF NOT EXISTS 'cpanel_admin'@'localhost' IDENTIFIED BY 'cPanelSecurePass2026!';
-ALTER USER 'cpanel_admin'@'localhost' IDENTIFIED BY 'cPanelSecurePass2026!';
-GRANT ALL PRIVILEGES ON *.* TO 'cpanel_admin'@'localhost' WITH GRANT OPTION;
-FLUSH PRIVILEGES;
-EOF
+SQL_USER_CMDS="CREATE USER IF NOT EXISTS 'cpanel_admin'@'localhost' IDENTIFIED BY 'cPanelSecurePass2026!'; ALTER USER 'cpanel_admin'@'localhost' IDENTIFIED BY 'cPanelSecurePass2026!'; GRANT ALL PRIVILEGES ON *.* TO 'cpanel_admin'@'localhost' WITH GRANT OPTION; FLUSH PRIVILEGES;"
+
+mariadb -u root -e "$SQL_USER_CMDS" 2>/dev/null || mariadb -e "$SQL_USER_CMDS" 2>/dev/null || mysql -u root -e "$SQL_USER_CMDS" 2>/dev/null || true
 
 if [ -f "${SCRIPT_DIR}/schema.sql" ]; then
-    mariadb -u root < "${SCRIPT_DIR}/schema.sql" 2>/dev/null || mariadb -u cpanel_admin -pcPanelSecurePass2026! < "${SCRIPT_DIR}/schema.sql" 2>/dev/null || true
+    mariadb -u root < "${SCRIPT_DIR}/schema.sql" 2>/dev/null || mariadb -u cpanel_admin -pcPanelSecurePass2026! < "${SCRIPT_DIR}/schema.sql" 2>/dev/null || mysql -u root < "${SCRIPT_DIR}/schema.sql" 2>/dev/null || true
     echo "✅ Database schema loaded successfully."
 fi
 
