@@ -4,20 +4,20 @@
 
 ---
 
-## 🚀 1-Command Automated VPS Installation (১-ক্লিক ইনস্টলেশন)
+## 🚀 1-Command Automated VPS Installation (যেকোনো VPS-এ ইনস্টলেশন)
 
-### মেথড ১ (সবচেয়ে সহজ ও রেকমেন্ডেড — সরাসরি ওয়ান-লাইন কার্ল ইনস্টলার):
-যেকোনো ফ্রেশ অথবা রানিং ভিপিএসে টার্মিনালে সরাসরি এই কমান্ডটি দিন:
+### 🌟 মেথড ১ (যেকোনো VPS-এ ১০০% কার্যকর ও রেডিমেড ইনস্টলেশন — রেকমেন্ডেড):
+যেকোনো নতুন বা ফ্রেশ **Ubuntu (20.04/22.04/24.04)** অথবা **Debian** VPS টার্মিনালে সরাসরি নিচের কমান্ডটি কপি-পেস্ট করে Enter চাপুন:
+```bash
+rm -rf Cpanel1280 && git clone https://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@github.com/abbas1280-dev/Cpanel1280.git && cd Cpanel1280 && sudo bash install.sh
+```
+
+### ⚡ মেথড ২ (যদি রিপোজিটরি Public করা থাকে — ওয়ান-লাইন কার্ল ইনস্টলার):
 ```bash
 curl -sSL https://raw.githubusercontent.com/abbas1280-dev/Cpanel1280/main/install.sh | sudo bash
 ```
 
-### মেথড ২ (গিট ক্লোন মেথড — ফোল্ডার থাকলেও কোনো এরর দিবে না):
-```bash
-rm -rf Cpanel1280 && git clone https://github.com/abbas1280-dev/Cpanel1280.git && cd Cpanel1280 && sudo bash install.sh
-```
-
-*(অথবা ইতিমধ্যে ক্লোন করা থাকলে সরাসরি আপডেট ও রান করতে: `cd Cpanel1280 && git pull && sudo bash install.sh`)*
+*(অথবা ইতিমধ্যে ক্লোন করা সার্ভারে নতুন কোড আপডেট করতে: `cd Cpanel1280 && git pull && sudo bash install.sh`)*
 
 ---
 

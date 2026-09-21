@@ -99,7 +99,7 @@ chown -R vmail:vmail /var/vmail
 chmod -R 770 /var/vmail
 
 # 10. Locate or Clone Repository Source Files
-REPO_URL="https://github.com/abbas1280-dev/Cpanel1280.git"
+REPO_URL="${REPO_URL:-https://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@github.com/abbas1280-dev/Cpanel1280.git}"
 APP_DIR="/opt/cpanel-core"
 
 # Check if script is running from an existing cloned repo
