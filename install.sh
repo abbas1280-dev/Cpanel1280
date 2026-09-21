@@ -259,23 +259,60 @@ fi
 # Store detected IP in system_settings
 mariadb -u cpanel_admin -pcPanelSecurePass2026! -e "USE cpanel_system; INSERT INTO system_settings (setting_key, setting_value) VALUES ('server_ip', '${SERVER_IP}') ON DUPLICATE KEY UPDATE setting_value = '${SERVER_IP}';" 2>/dev/null || true
 
+# 19. Generate Branded tPanel Short Link
+TARGET_WIZARD_URL=""
+if [ -n "$CF_TUNNEL_URL" ]; then
+    TARGET_WIZARD_URL="${CF_TUNNEL_URL}/tpanel-setup"
+else
+    TARGET_WIZARD_URL="http://${SERVER_IP}/tpanel-setup"
+fi
+
+SHORT_TPANEL_LINK=""
+RAND_SUFFIX=$(head /dev/urandom | tr -dc '0-9' | head -c 4 2>/dev/null || echo "$((1000 + RANDOM % 9000))")
+TINY_ALIAS="tpanel-setup-${RAND_SUFFIX}"
+ENCODED_TARGET=$(python3 -c "import urllib.parse, sys; print(urllib.parse.quote(sys.argv[1]))" "$TARGET_WIZARD_URL" 2>/dev/null || node -e "console.log(encodeURIComponent(process.argv[1]))" "$TARGET_WIZARD_URL" 2>/dev/null || echo "$TARGET_WIZARD_URL")
+
+RESP_TINY=$(curl -s --connect-timeout 4 "https://tinyurl.com/api-create.php?url=${ENCODED_TARGET}&alias=${TINY_ALIAS}" 2>/dev/null || true)
+if [[ "$RESP_TINY" == https://tinyurl.com/* ]]; then
+    SHORT_TPANEL_LINK="$RESP_TINY"
+else
+    RESP_DAGD=$(curl -s --connect-timeout 4 "https://da.gd/s?url=${ENCODED_TARGET}&shorturl=tpanel-${RAND_SUFFIX}" 2>/dev/null || true)
+    if [[ "$RESP_DAGD" == https://da.gd/* ]]; then
+        SHORT_TPANEL_LINK=$(echo "$RESP_DAGD" | tr -d ' \r\n')
+    else
+        RESP_FALLBACK=$(curl -s --connect-timeout 4 "https://tinyurl.com/api-create.php?url=${ENCODED_TARGET}" 2>/dev/null || true)
+        if [[ "$RESP_FALLBACK" == https://tinyurl.com/* ]]; then
+            SHORT_TPANEL_LINK="$RESP_FALLBACK"
+        fi
+    fi
+fi
+
+if [ -n "$SHORT_TPANEL_LINK" ]; then
+    mariadb -u cpanel_admin -pcPanelSecurePass2026! -e "USE cpanel_system; INSERT INTO system_settings (setting_key, setting_value) VALUES ('short_setup_url', '${SHORT_TPANEL_LINK}') ON DUPLICATE KEY UPDATE setting_value = '${SHORT_TPANEL_LINK}';" 2>/dev/null || true
+fi
+
 echo ""
 echo "=========================================================================="
 echo "  🎉 CONGRATULATIONS! CPANEL1280 INSTALLED SUCCESSFULLY!"
 echo "=========================================================================="
 echo ""
+if [ -n "$SHORT_TPANEL_LINK" ]; then
+echo "  👉 🚀 BRANDED TPANEL SETUP LINK (ব্র্যান্ডেড শর্ট লিঙ্ক — যেকোনো ডিভাইসে ১-ক্লিকে ওপেন):"
+echo "     ${SHORT_TPANEL_LINK}"
+echo ""
+fi
 if [ -n "$CF_TUNNEL_URL" ]; then
-echo "  👉 🌟 INSTANT CLOUDFLARE WIZARD LINK (যেকোনো VPS/NAT/স্যান্ডবক্সে ১-ক্লিকে ওপেন):"
-echo "     ${CF_TUNNEL_URL}/install-wizard"
+echo "  👉 🌟 CLOUDFLARE INSTANT TUNNEL LINK:"
+echo "     ${TARGET_WIZARD_URL}"
 echo ""
 fi
 echo "  👉 🌐 DIRECT IP LINK (সাধারণ ডেডিকেটেড VPS-এর জন্য):"
-echo "     http://${SERVER_IP}/install-wizard"
-echo "     (or direct: http://${SERVER_IP}:3000/install-wizard)"
+echo "     http://${SERVER_IP}/tpanel-setup"
+echo "     (or direct: http://${SERVER_IP}:3000/tpanel-setup)"
 echo ""
 echo "  📋 NEXT STEPS (পরবর্তী করণীয় ধাপসমূহ):"
-echo "  1. Open the instant Cloudflare wizard link in your browser."
-echo "     (যেকোনো ব্রাউজারে উপরের ক্লাউডফ্লেয়ার ইনস্ট্যান্ট লিংকে প্রবেশ করুন)"
+echo "  1. Open the branded tPanel setup link in your browser."
+echo "     (যেকোনো ব্রাউজারে উপরের ব্র্যান্ডেড লিংকে প্রবেশ করুন)"
 echo "  2. Enter your master domain (e.g. yourdomain.com) and admin credentials."
 echo "     (আপনার মাস্টার ডোমেন নাম এবং অ্যাডমিন পাসওয়ার্ড লিখুন)"
 echo "  3. Select Cloudflare Auto-Pilot (Yes) or Manual DNS (No):"

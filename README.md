@@ -30,11 +30,14 @@ curl -sSL https://raw.githubusercontent.com/abbas1280-dev/Cpanel1280/main/instal
   🎉 CONGRATULATIONS! CPANEL1280 INSTALLED SUCCESSFULLY!
 ==========================================================================
 
-  👉 🌟 INSTANT CLOUDFLARE WIZARD LINK (যেকোনো VPS/NAT/স্যান্ডবক্সে ১-ক্লিকে ওপেন):
-     https://<unique-subdomain>.trycloudflare.com/install-wizard
+  👉 🚀 BRANDED TPANEL SETUP LINK (ব্র্যান্ডেড শর্ট লিঙ্ক — যেকোনো ডিভাইসে ১-ক্লিকে ওপেন):
+     https://tinyurl.com/tpanel-setup-XXXX
+
+  👉 🌟 CLOUDFLARE INSTANT TUNNEL LINK:
+     https://<unique-subdomain>.trycloudflare.com/tpanel-setup
 
   👉 🌐 DIRECT IP LINK (সাধারণ ডেডিকেটেড VPS-এর জন্য):
-     http://<YOUR_VPS_IP>/install-wizard
+     http://<YOUR_VPS_IP>/tpanel-setup
 ==========================================================================
 ```
 

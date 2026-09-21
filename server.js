@@ -3463,7 +3463,7 @@ async function checkInstallerLocked(req, res, next) {
 }
 
 // Serve setup wizard (Auto-locked if already installed)
-app.get('/install-wizard', checkInstallerLocked, (req, res) => {
+app.get(['/tpanel-setup', '/install-wizard'], checkInstallerLocked, (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'install-wizard.html'));
 });
 
@@ -4641,15 +4641,15 @@ setInterval(async () => {
 }, 30 * 60 * 1000);
 
 
-// Auto-detect first-time visit: if not installed, redirect browser to /install-wizard
+// Auto-detect first-time visit: if not installed, redirect browser to /tpanel-setup
 app.use(async (req, res, next) => {
-    if (req.path.startsWith('/api/') || req.path.startsWith('/install-wizard') || req.path.includes('.')) {
+    if (req.path.startsWith('/api/') || req.path.startsWith('/tpanel-setup') || req.path.startsWith('/install-wizard') || req.path.includes('.')) {
         return next();
     }
     try {
         const [rows] = await pool.query("SELECT setting_value FROM system_settings WHERE setting_key = 'installed' LIMIT 1");
         if (rows.length === 0 || rows[0].setting_value !== 'true') {
-            return res.redirect('/install-wizard');
+            return res.redirect('/tpanel-setup');
         }
     } catch (e) {}
     next();
