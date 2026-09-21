@@ -3884,27 +3884,9 @@
                     activeServices = [data.service];
                     currentUser = data.user;
 
-                    document.getElementById('auth-section').classList.add('hidden');
-                    document.getElementById('portal-section').classList.add('hidden');
-                    document.getElementById('tpanel-section').classList.remove('hidden');
-                    const mainHdr = document.getElementById('main-header');
-                    if (mainHdr) mainHdr.classList.remove('hidden');
-
-                    // Enforce guest session button visibility
-                    const backBtn = document.getElementById('tpanel-back-to-portal-btn');
-                    const guestLogoutBtn = document.getElementById('tpanel-guest-logout-btn');
-                    if (backBtn) backBtn.classList.add('hidden');
-                    if (guestLogoutBtn) guestLogoutBtn.classList.remove('hidden');
-
-                    document.getElementById('tpanel-active-domain').textContent = selectedService.domain;
-                    document.getElementById('tpanel-active-docroot').textContent = selectedService.doc_root;
-                    document.getElementById('tpanel-visit-site-link').href = `http://${selectedService.domain}`;
-                    document.getElementById('subdomain-root-suffix').textContent = `.${selectedService.domain}`;
-
                     const urlParams = new URLSearchParams(window.location.search);
                     const view = urlParams.get('view') || 'overview';
-                    switchTpanelTab(view, false);
-                    updateBrowserUrl(`/tpanel?service_id=${selectedService.id}&view=${view}`, `Tpanel - ${selectedService.domain}`);
+                    await enterCpanel(selectedService.id, false, view);
                     showToast(`Tpanel access granted for ${selectedService.domain} (টি প্যানেলে স্বাগতম)`, 'success');
                     return;
                 }
@@ -3955,7 +3937,8 @@
             if (isGuestSession) {
                 if (activeServices.length > 0) {
                     selectedService = activeServices[0];
-                    enterTpanel(selectedService.id, false);
+                    const view = urlParams.get('view') || 'overview';
+                    await enterCpanel(selectedService.id, false, view);
                 }
                 return;
             }
@@ -3972,19 +3955,8 @@
                 }
 
                 if (targetService) {
-                    selectedService = targetService;
-                    document.getElementById('portal-section').classList.add('hidden');
-                    document.getElementById('tpanel-section').classList.remove('hidden');
-                    const mainHdr = document.getElementById('main-header');
-                    if (mainHdr) mainHdr.classList.remove('hidden');
-
-                    document.getElementById('tpanel-active-domain').textContent = selectedService.domain;
-                    document.getElementById('tpanel-active-docroot').textContent = selectedService.doc_root;
-                    document.getElementById('tpanel-visit-site-link').href = `http://${selectedService.domain}`;
-                    document.getElementById('subdomain-root-suffix').textContent = `.${selectedService.domain}`;
-
-                    switchTpanelTab(queryView, false);
-                    document.title = `Tpanel - ${selectedService.domain} (${queryView.toUpperCase()})`;
+                    await enterCpanel(targetService.id, false, queryView);
+                    document.title = `Tpanel - ${targetService.domain} (${queryView.toUpperCase()})`;
                 } else {
                     switchPortalNav('services', null, false);
                 }
@@ -4092,7 +4064,8 @@
             const phName = document.getElementById('portal-header-user-name');
             if (phName) phName.textContent = displayName;
 
-            await loadPortalServices();
+            const isTpanelRoute = window.location.pathname.startsWith('/tpanel') || new URLSearchParams(window.location.search).get('page') === 'tpanel' || new URLSearchParams(window.location.search).get('service_id');
+            await loadPortalServices(!isTpanelRoute);
             await handleAppRouting(true);
         }
 
@@ -4237,11 +4210,15 @@
         // -------------------------------------------------------------
         // PORTAL SERVICES LOGIC
         // -------------------------------------------------------------
-        async function loadPortalServices() {
-            document.getElementById('portal-section').classList.remove('hidden');
-            document.getElementById('cpanel-section').classList.add('hidden');
-            const mainHdr = document.getElementById('main-header');
-            if (mainHdr) mainHdr.classList.add('hidden');
+        async function loadPortalServices(showPortalUI = true) {
+            if (showPortalUI) {
+                const portalSec = document.getElementById('portal-section');
+                if (portalSec) portalSec.classList.remove('hidden');
+                const cpanelSec = document.getElementById('cpanel-section');
+                if (cpanelSec) cpanelSec.classList.add('hidden');
+                const mainHdr = document.getElementById('main-header');
+                if (mainHdr) mainHdr.classList.add('hidden');
+            }
 
             try {
                 const res = await fetch('/api/portal/services', {
@@ -5142,12 +5119,19 @@
             switchPortalNav('services', null, push);
         }
 
-        async function enterCpanel(serviceId, push = true) {
-            selectedService = activeServices.find(s => s.id === serviceId);
+        async function enterCpanel(serviceId, push = true, targetTab = 'overview') {
+            selectedService = activeServices.find(s => s.id == serviceId);
+            if (!selectedService && activeServices.length > 0) {
+                selectedService = activeServices[0];
+            }
             if (!selectedService) return;
 
-            document.getElementById('portal-section').classList.add('hidden');
-            document.getElementById('cpanel-section').classList.remove('hidden');
+            const authSec = document.getElementById('auth-section');
+            if (authSec) authSec.classList.add('hidden');
+            const portalSec = document.getElementById('portal-section');
+            if (portalSec) portalSec.classList.add('hidden');
+            const cpanelSec = document.getElementById('cpanel-section');
+            if (cpanelSec) cpanelSec.classList.remove('hidden');
             const mainHdr = document.getElementById('main-header');
             if (mainHdr) mainHdr.classList.remove('hidden');
 
@@ -5164,20 +5148,27 @@
                 if (guestPortalBtn) guestPortalBtn.classList.add('hidden');
             }
 
-            document.getElementById('cpanel-active-domain').textContent = selectedService.domain;
-            document.getElementById('cpanel-active-docroot').textContent = selectedService.doc_root;
-            document.getElementById('cpanel-visit-site-link').href = `http://${selectedService.domain}`;
-            document.getElementById('subdomain-root-suffix').textContent = `.${selectedService.domain}`;
+            const domEl = document.getElementById('cpanel-active-domain');
+            if (domEl) domEl.textContent = selectedService.domain;
+            const docEl = document.getElementById('cpanel-active-docroot');
+            if (docEl) docEl.textContent = selectedService.doc_root;
+            const linkEl = document.getElementById('cpanel-visit-site-link');
+            if (linkEl) linkEl.href = `http://${selectedService.domain}`;
+            const subSuffix = document.getElementById('subdomain-root-suffix');
+            if (subSuffix) subSuffix.textContent = `.${selectedService.domain}`;
 
             if (push) {
-                updateBrowserUrl(`/tpanel?service_id=${selectedService.id}`, `Tpanel - ${selectedService.domain}`);
+                updateBrowserUrl(`/tpanel?service_id=${selectedService.id}&view=${targetTab}`, `Tpanel - ${selectedService.domain} (${targetTab.toUpperCase()})`);
             }
 
-            // Load Overview Tab by default
-            switchCpanelTab('overview', push);
+            // Load specified Tab
+            switchCpanelTab(targetTab, push);
         }
+        window.enterTpanel = enterCpanel;
+        window.enterCpanel = enterCpanel;
 
         function switchCpanelTab(tabName, push = true) {
+            if (!tabName) tabName = 'overview';
             // Global alias
             window.switchTpanelTab = switchCpanelTab;
             // Update Tab Buttons
