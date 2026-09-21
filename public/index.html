@@ -4890,6 +4890,18 @@
             }
         }
 
+        function enterCpanelDirect() {
+            if (activeProductService && activeProductService.id) {
+                enterCpanel(activeProductService.id);
+            } else if (typeof selectedService !== 'undefined' && selectedService && selectedService.id) {
+                enterCpanel(selectedService.id);
+            } else if (Array.isArray(activeServices) && activeServices.length > 0) {
+                enterCpanel(activeServices[0].id);
+            } else {
+                switchPortalNav('services');
+            }
+        }
+
         function togglePdPasswordVisibility() {
             pdPasswordVisible = !pdPasswordVisible;
             const masked = document.getElementById('pd-info-password-masked');
@@ -5840,6 +5852,33 @@
             </svg>`;
         }
     
+        let fmSortOrder = { field: null, asc: true };
+        function sortFiles(criterion) {
+            if (!Array.isArray(fmCachedFiles) || fmCachedFiles.length === 0) return;
+            if (fmSortOrder.field === criterion) {
+                fmSortOrder.asc = !fmSortOrder.asc;
+            } else {
+                fmSortOrder.field = criterion;
+                fmSortOrder.asc = true;
+            }
+            const factor = fmSortOrder.asc ? 1 : -1;
+            fmCachedFiles.sort((a, b) => {
+                if (a.isDir && !b.isDir) return -1;
+                if (!a.isDir && b.isDir) return 1;
+                if (criterion === 'name') {
+                    return (a.name || '').localeCompare(b.name || '') * factor;
+                } else if (criterion === 'size') {
+                    return ((a.size || 0) - (b.size || 0)) * factor;
+                } else if (criterion === 'modified') {
+                    const dateA = new Date(a.modified || 0).getTime();
+                    const dateB = new Date(b.modified || 0).getTime();
+                    return (dateA - dateB) * factor;
+                }
+                return 0;
+            });
+            renderFilesTable(fmCachedFiles);
+        }
+
         function renderFilesTable(files) {
             const tbody = document.getElementById('fm-files-tbody');
             if (!tbody) return;
@@ -7318,7 +7357,7 @@
                                             <i data-lucide="sparkles" class="w-4 h-4"></i>
                                             <span>🚀 অটো-পাইলট উইজার্ড</span>
                                         </button>
-                                        <button onclick="activateLiveDomainRouting(this)" class="px-4 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-xs transition shadow-lg shadow-emerald-600/25 flex items-center gap-1.5">
+                                        <button id="btn-activate-domain" onclick="activateLiveDomainRouting(this)" class="px-4 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-xs transition shadow-lg shadow-emerald-600/25 flex items-center gap-1.5">
                                             <i data-lucide="zap" class="w-4 h-4 text-amber-300"></i>
                                             <span>⚡ ডোমেইন যাচাই ও SSL চালু</span>
                                         </button>
@@ -7576,9 +7615,9 @@
             loadFileBrowser(relDoc);
         }
 
-        async function activateDomainRouting() {
+        async function activateDomainRouting(btnPassed) {
             if (!selectedService) return;
-            const btn = document.getElementById('btn-activate-domain');
+            const btn = btnPassed || document.getElementById('btn-activate-domain');
             if (btn) {
                 btn.disabled = true;
                 btn.innerHTML = `<i data-lucide="loader-2" class="w-4 h-4 animate-spin"></i> <span>Checking DNS & Activating...</span>`;
@@ -7610,6 +7649,10 @@
                     lucide.createIcons();
                 }
             }
+        }
+
+        function activateLiveDomainRouting(btn) {
+            return activateDomainRouting(btn);
         }
 
         // -------------------------------------------------------------
@@ -8858,7 +8901,7 @@
             }
 
             try {
-                const res = await fetch(`/api/tpanel/email/list?serviceId=${selectedService.id}`, {
+                const res = await fetch(`/api/cpanel/email/list?serviceId=${selectedService.id}`, {
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
                 const data = await res.json();
@@ -8936,7 +8979,7 @@
             btn.innerHTML = '<div class="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div><span>Creating Mailbox...</span>';
 
             try {
-                const res = await fetch('/api/tpanel/email/create', {
+                const res = await fetch('/api/cpanel/email/create', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
@@ -8968,7 +9011,7 @@
         async function deleteEmailAccount(accId, email) {
             if (!confirm(`Are you sure you want to permanently delete mailbox ${email}? All emails will be erased.`)) return;
             try {
-                const res = await fetch('/api/tpanel/email/delete', {
+                const res = await fetch('/api/cpanel/email/delete', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
@@ -9071,7 +9114,7 @@
             }
 
             try {
-                const res = await fetch(`/api/tpanel/email/messages?accountId=${currentEmailAccountId}&folder=${currentEmailFolder}`, {
+                const res = await fetch(`/api/cpanel/email/messages?accountId=${currentEmailAccountId}&folder=${currentEmailFolder}`, {
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
                 const data = await res.json();
@@ -9170,7 +9213,7 @@
             // Mark read on server
             if (!msg.is_read) {
                 msg.is_read = true;
-                fetch('/api/tpanel/email/mark-read', {
+                fetch('/api/cpanel/email/mark-read', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
                     body: JSON.stringify({ messageId: msg.id })
@@ -9216,7 +9259,7 @@
             if (!currentViewingMessage) return;
             if (!confirm('Are you sure you want to delete this email?')) return;
             try {
-                const res = await fetch('/api/tpanel/email/delete-message', {
+                const res = await fetch('/api/cpanel/email/delete-message', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
                     body: JSON.stringify({ messageId: currentViewingMessage.id })
@@ -9244,7 +9287,7 @@
             btn.innerHTML = '<div class="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div><span>Sending Email...</span>';
 
             try {
-                const res = await fetch('/api/tpanel/email/send', {
+                const res = await fetch('/api/cpanel/email/send', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
@@ -9293,7 +9336,7 @@
 
             try {
                 const srvId = selectedService ? selectedService.id : '';
-                const res = await fetch(`/api/tpanel/email/deliverability?domain=${curDomain}&serviceId=${srvId}`, {
+                const res = await fetch(`/api/cpanel/email/deliverability?domain=${curDomain}&serviceId=${srvId}`, {
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
                 const data = await res.json();
@@ -9375,7 +9418,7 @@
             if (box) box.classList.add('hidden');
 
             try {
-                const res = await fetch('/api/tpanel/email/test-send', {
+                const res = await fetch('/api/cpanel/email/test-send', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',

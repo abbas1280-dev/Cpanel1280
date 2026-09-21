@@ -119,6 +119,14 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname, 'public')));
 
+// Transparent rewrite for /api/tpanel/email/* to /api/cpanel/email/* for backwards and forwards compatibility
+app.use((req, res, next) => {
+    if (req.url.startsWith('/api/tpanel/email')) {
+        req.url = req.url.replace('/api/tpanel/email', '/api/cpanel/email');
+    }
+    next();
+});
+
 // Multer storage for File Manager uploads
 const storage = multer.diskStorage({
     destination: (req, file, cb) => {
@@ -1663,7 +1671,8 @@ app.post('/api/cpanel/files/upload', authMiddleware, async (req, res, next) => {
             await execPromise(`sudo chown -R www-data:www-data "${req.uploadTargetDir}" 2>/dev/null || true`);
         }
     } catch (e) {}
-    res.json({ message: 'Files uploaded successfully', count: req.files.length });
+    const fileCount = (req.files && Array.isArray(req.files)) ? req.files.length : 0;
+    res.json({ message: 'Files uploaded successfully', count: fileCount });
 });
 
 
@@ -3275,6 +3284,75 @@ app.post('/api/cpanel/email/test-send', authMiddleware, async (req, res) => {
         });
     } catch (err) {
         res.status(500).json({ error: err.message || 'Failed to send test email' });
+    }
+});
+
+// GET Email Deliverability Records (SPF, DKIM, DMARC, MX, A)
+app.get(['/api/cpanel/email/deliverability', '/api/tpanel/email/deliverability'], authMiddleware, async (req, res) => {
+    try {
+        let domain = (req.query.domain || '').toLowerCase().trim();
+        const serviceId = req.query.serviceId;
+
+        if (!domain && serviceId) {
+            const [services] = await pool.query('SELECT domain FROM services WHERE id = ?', [serviceId]);
+            if (services.length > 0) domain = services[0].domain;
+        }
+
+        if (!domain) {
+            return res.status(400).json({ error: 'Domain or serviceId is required' });
+        }
+
+        const serverIp = await getServerPublicIp();
+        const dkim = await getOrCreateDkimKeys(domain);
+        const dkimKey = dkim ? dkim.public_key : '';
+
+        const records = [
+            {
+                recordType: 'A',
+                name: `mail.${domain}`,
+                content: serverIp,
+                status: 'Active',
+                description: 'Mail Server Direct IPv4 Address',
+                proxied: 'DNS Only (Required for SMTP/IMAP)'
+            },
+            {
+                recordType: 'MX',
+                name: domain,
+                content: `mail.${domain}`,
+                priority: 10,
+                status: 'Active',
+                description: 'Mail Exchanger Record (Priority 10)',
+                proxied: 'DNS Only'
+            },
+            {
+                recordType: 'TXT',
+                name: domain,
+                content: `v=spf1 mx a ip4:${serverIp} ~all`,
+                status: 'Active',
+                description: 'Sender Policy Framework (SPF) Record',
+                proxied: 'DNS Only'
+            },
+            {
+                recordType: 'TXT',
+                name: `default._domainkey.${domain}`,
+                content: `v=DKIM1; k=rsa; p=${dkimKey}`,
+                status: 'Active',
+                description: '2048-bit RSA Cryptographic DKIM Key',
+                proxied: 'DNS Only'
+            },
+            {
+                recordType: 'TXT',
+                name: `_dmarc.${domain}`,
+                content: `v=DMARC1; p=quarantine; sp=quarantine; rua=mailto:admin@${domain};`,
+                status: 'Active',
+                description: 'DMARC Email Authentication & Anti-Phishing Policy',
+                proxied: 'DNS Only'
+            }
+        ];
+
+        res.json({ success: true, domain, serverIp, records });
+    } catch (err) {
+        res.status(500).json({ error: 'Failed to generate deliverability records: ' + err.message });
     }
 });
 
