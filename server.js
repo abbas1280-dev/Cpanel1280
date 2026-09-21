@@ -336,6 +336,59 @@ async function initDB() {
     }
 }
 
+// -------------------------------------------------------------------
+// 2048-BIT RSA CRYPTOGRAPHIC DKIM KEY ENGINE
+// -------------------------------------------------------------------
+async function getOrCreateDkimKeys(domain) {
+    if (!domain) return null;
+    const cleanDomain = domain.toLowerCase().trim();
+    try {
+        const [rows] = await pool.query('SELECT * FROM domain_dkim_keys WHERE domain = ? LIMIT 1', [cleanDomain]);
+        if (rows.length > 0) {
+            return rows[0];
+        }
+
+        // Generate 2048-bit RSA key pair for DKIM
+        const { publicKey, privateKey } = crypto.generateKeyPairSync('rsa', {
+            modulusLength: 2048,
+            publicKeyEncoding: {
+                type: 'spki',
+                format: 'pem'
+            },
+            privateKeyEncoding: {
+                type: 'pkcs8',
+                format: 'pem'
+            }
+        });
+
+        // Strip PEM headers and newlines for DNS TXT record value
+        const cleanPublicKey = publicKey
+            .replace(/-----BEGIN PUBLIC KEY-----/, '')
+            .replace(/-----END PUBLIC KEY-----/, '')
+            .replace(/[\r\n\s]+/g, '');
+
+        await pool.query(
+            'INSERT INTO domain_dkim_keys (domain, selector, private_key, public_key) VALUES (?, ?, ?, ?) ON DUPLICATE KEY UPDATE public_key = VALUES(public_key), private_key = VALUES(private_key)',
+            [cleanDomain, 'default', privateKey, cleanPublicKey]
+        );
+
+        return {
+            domain: cleanDomain,
+            selector: 'default',
+            private_key: privateKey,
+            public_key: cleanPublicKey
+        };
+    } catch (err) {
+        console.warn(`DKIM key generation warning for ${domain}:`, err.message);
+        return {
+            domain: cleanDomain,
+            selector: 'default',
+            private_key: '',
+            public_key: ''
+        };
+    }
+}
+
 // Auth Middleware with Live Revocation Check
 async function authMiddleware(req, res, next) {
     let token = null;
