@@ -3659,6 +3659,250 @@ app.post('/api/cpanel/cloudflare/sync-email-records', authMiddleware, async (req
     }
 });
 
+// ==========================================
+// 12. 1-CLICK FULL BACKUP & RESTORE ENGINE
+// ==========================================
+const BACKUP_BASE_DIR = '/var/cpanel/backups';
+
+async function getBackupDirectory(serviceId) {
+    const dir = path.join(BACKUP_BASE_DIR, String(serviceId));
+    await fsp.mkdir(dir, { recursive: true, mode: 0o755 });
+    return dir;
+}
+
+// 1. List Backups
+app.get('/api/cpanel/backup/list', authMiddleware, async (req, res) => {
+    try {
+        const { serviceId } = req.query;
+        const service = await getServiceForUser(serviceId, req.user);
+        if (!service) return res.status(404).json({ error: 'Service not found' });
+
+        const backupDir = await getBackupDirectory(service.id);
+        const files = await fsp.readdir(backupDir);
+        const backups = [];
+
+        for (const file of files) {
+            if (!file.endsWith('.tar.gz') && !file.endsWith('.zip')) continue;
+            const fullPath = path.join(backupDir, file);
+            const stat = await fsp.stat(fullPath);
+
+            let type = 'full';
+            if (file.includes('_files')) type = 'files';
+            else if (file.includes('_database')) type = 'database';
+
+            backups.push({
+                filename: file,
+                type,
+                sizeBytes: stat.size,
+                sizeFormatted: (stat.size / (1024 * 1024)).toFixed(2) + ' MB',
+                createdAt: stat.mtime
+            });
+        }
+
+        backups.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+        res.json({ backups });
+    } catch (err) {
+        res.status(500).json({ error: 'Failed to list backups: ' + err.message });
+    }
+});
+
+// 2. Create Backup
+app.post('/api/cpanel/backup/create', authMiddleware, async (req, res) => {
+    try {
+        const { serviceId, backupType } = req.body;
+        const type = ['full', 'files', 'database'].includes(backupType) ? backupType : 'full';
+        const service = await getServiceForUser(serviceId, req.user);
+        if (!service) return res.status(404).json({ error: 'Service not found' });
+
+        const domain = service.domain;
+        const now = new Date();
+        const dateStr = now.toISOString().slice(0, 10);
+        const timeStr = now.toTimeString().slice(0, 8).replace(/:/g, '');
+        const timestamp = `${dateStr}_${timeStr}`;
+
+        const backupDir = await getBackupDirectory(service.id);
+        const tempWorkDir = path.join('/tmp', `backup_tmp_${service.id}_${Date.now()}`);
+        await fsp.mkdir(tempWorkDir, { recursive: true });
+
+        const finalFilename = `backup_${domain}_${timestamp}_${type}.tar.gz`;
+        const finalFilePath = path.join(backupDir, finalFilename);
+
+        // A. Databases backup
+        const [dbs] = await pool.query('SELECT db_name FROM databases_list WHERE service_id = ?', [service.id]);
+        const dbNames = dbs.map(d => d.db_name);
+
+        if (type === 'full' || type === 'database') {
+            const dbDir = path.join(tempWorkDir, 'databases');
+            await fsp.mkdir(dbDir, { recursive: true });
+
+            for (const dbName of dbNames) {
+                const dumpFile = path.join(dbDir, `${dbName}.sql`);
+                try {
+                    await execPromise(`mysqldump -u root "${dbName}" > "${dumpFile}"`);
+                } catch (dumpErr) {
+                    console.error(`Dump failed for ${dbName}:`, dumpErr.message);
+                }
+            }
+        }
+
+        // B. Files backup
+        const vhostPath = path.join('/var/www/vhosts', domain);
+        if (type === 'full' || type === 'files') {
+            const filesDir = path.join(tempWorkDir, 'files');
+            await fsp.mkdir(filesDir, { recursive: true });
+
+            const publicHtmlPath = path.join(vhostPath, 'public_html');
+            const targetTar = path.join(filesDir, 'public_html.tar.gz');
+            if (fs.existsSync(publicHtmlPath)) {
+                await execPromise(`tar -czf "${targetTar}" -C "${vhostPath}" public_html`);
+            }
+        }
+
+        // C. Metadata
+        const [emails] = await pool.query('SELECT email_user, full_email, quota_mb FROM email_accounts WHERE service_id = ?', [service.id]);
+        const [crons] = await pool.query('SELECT schedule, command FROM cron_jobs WHERE service_id = ?', [service.id]);
+        const [subs] = await pool.query('SELECT subdomain, full_domain, document_root, php_version FROM subdomains WHERE service_id = ?', [service.id]);
+
+        const metadata = {
+            serviceId: service.id,
+            domain: service.domain,
+            phpVersion: service.php_version,
+            backupType: type,
+            createdAt: now.toISOString(),
+            databases: dbNames,
+            subdomains: subs,
+            emailAccounts: emails,
+            cronJobs: crons,
+            platform: 'Cpanel1280-Enterprise'
+        };
+
+        await fsp.writeFile(path.join(tempWorkDir, 'cpanel_metadata.json'), JSON.stringify(metadata, null, 2), 'utf8');
+
+        // D. Create final combined tarball
+        await execPromise(`tar -czf "${finalFilePath}" -C "${tempWorkDir}" .`);
+
+        // Clean up temp dir
+        await fsp.rm(tempWorkDir, { recursive: true, force: true }).catch(() => {});
+
+        const stat = await fsp.stat(finalFilePath);
+
+        res.json({
+            success: true,
+            message: 'Backup created successfully (ব্যাকআপ সফলভাবে তৈরি হয়েছে)',
+            backup: {
+                filename: finalFilename,
+                type,
+                sizeBytes: stat.size,
+                sizeFormatted: (stat.size / (1024 * 1024)).toFixed(2) + ' MB',
+                createdAt: stat.mtime
+            }
+        });
+    } catch (err) {
+        res.status(500).json({ error: 'Failed to create backup: ' + err.message });
+    }
+});
+
+// 3. Download Backup
+app.get('/api/cpanel/backup/download', authMiddleware, async (req, res) => {
+    try {
+        const { serviceId, filename } = req.query;
+        const service = await getServiceForUser(serviceId, req.user);
+        if (!service) return res.status(404).json({ error: 'Service not found' });
+
+        const safeFilename = path.basename(filename);
+        const backupDir = await getBackupDirectory(service.id);
+        const filePath = path.join(backupDir, safeFilename);
+
+        if (!fs.existsSync(filePath)) {
+            return res.status(404).json({ error: 'Backup file not found' });
+        }
+
+        res.download(filePath, safeFilename);
+    } catch (err) {
+        res.status(500).json({ error: 'Download failed: ' + err.message });
+    }
+});
+
+// 4. Restore Backup
+app.post('/api/cpanel/backup/restore', authMiddleware, async (req, res) => {
+    try {
+        const { serviceId, filename } = req.body;
+        const service = await getServiceForUser(serviceId, req.user);
+        if (!service) return res.status(404).json({ error: 'Service not found' });
+
+        const safeFilename = path.basename(filename);
+        const backupDir = await getBackupDirectory(service.id);
+        const archivePath = path.join(backupDir, safeFilename);
+
+        if (!fs.existsSync(archivePath)) {
+            return res.status(404).json({ error: 'Backup file not found' });
+        }
+
+        const domain = service.domain;
+        const vhostPath = path.join('/var/www/vhosts', domain);
+        const tempExtractDir = path.join('/tmp', `restore_tmp_${service.id}_${Date.now()}`);
+        await fsp.mkdir(tempExtractDir, { recursive: true });
+
+        // Extract master archive
+        await execPromise(`tar -xzf "${archivePath}" -C "${tempExtractDir}"`);
+
+        // A. Restore files if present
+        const filesTar = path.join(tempExtractDir, 'files', 'public_html.tar.gz');
+        if (fs.existsSync(filesTar)) {
+            await execPromise(`tar -xzf "${filesTar}" -C "${vhostPath}"`);
+            await execPromise(`chown -R www-data:www-data "${path.join(vhostPath, 'public_html')}"`);
+        }
+
+        // B. Restore databases if present
+        const dbDir = path.join(tempExtractDir, 'databases');
+        if (fs.existsSync(dbDir)) {
+            const sqlFiles = await fsp.readdir(dbDir);
+            for (const sqlFile of sqlFiles) {
+                if (!sqlFile.endsWith('.sql')) continue;
+                const dbName = sqlFile.replace(/\.sql$/, '');
+                const sqlFilePath = path.join(dbDir, sqlFile);
+                try {
+                    await execPromise(`mysql -u root -e "CREATE DATABASE IF NOT EXISTS \\\`${dbName}\\\`;"`);
+                    await execPromise(`mysql -u root "${dbName}" < "${sqlFilePath}"`);
+                } catch (sqlErr) {
+                    console.error(`Error restoring db ${dbName}:`, sqlErr.message);
+                }
+            }
+        }
+
+        // Clean up temp dir
+        await fsp.rm(tempExtractDir, { recursive: true, force: true }).catch(() => {});
+
+        res.json({
+            success: true,
+            message: 'Website files & databases restored successfully (সফলভাবে রিস্টোর সম্পন্ন হয়েছে)'
+        });
+    } catch (err) {
+        res.status(500).json({ error: 'Restore failed: ' + err.message });
+    }
+});
+
+// 5. Delete Backup
+app.post('/api/cpanel/backup/delete', authMiddleware, async (req, res) => {
+    try {
+        const { serviceId, filename } = req.body;
+        const service = await getServiceForUser(serviceId, req.user);
+        if (!service) return res.status(404).json({ error: 'Service not found' });
+
+        const safeFilename = path.basename(filename);
+        const backupDir = await getBackupDirectory(service.id);
+        const filePath = path.join(backupDir, safeFilename);
+
+        if (fs.existsSync(filePath)) {
+            await fsp.unlink(filePath);
+        }
+
+        res.json({ success: true, message: 'Backup file deleted (ব্যাকআপ মুছে ফেলা হয়েছে)' });
+    } catch (err) {
+        res.status(500).json({ error: 'Delete failed: ' + err.message });
+    }
+});
+
 
 // Auto-detect first-time visit: if not installed, redirect browser to /install-wizard
 app.use(async (req, res, next) => {

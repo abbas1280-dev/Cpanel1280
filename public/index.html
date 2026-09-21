@@ -2228,6 +2228,12 @@
                         <span>CRON JOBS</span>
                     </button>
 
+                    <!-- BACKUP & RESTORE -->
+                    <button onclick="switchCpanelTab('backup')" id="tab-backup" class="cpanel-tab-btn px-3 sm:px-4 py-2 rounded-xl flex items-center gap-2 whitespace-nowrap transition text-slate-300 hover:text-white hover:bg-white/10">
+                        <i data-lucide="archive" class="w-4 h-4 text-teal-400"></i>
+                        <span>BACKUPS</span>
+                    </button>
+
                     <!-- SOFTWARE -->
                     <button onclick="switchCpanelTab('php')" id="tab-php" class="cpanel-tab-btn px-3 sm:px-4 py-2 rounded-xl flex items-center gap-2 whitespace-nowrap transition text-slate-300 hover:text-white hover:bg-white/10">
                         <i data-lucide="cpu" class="w-4 h-4 text-pink-400"></i>
@@ -2362,6 +2368,15 @@
                             </div>
                             <span class="text-xs font-bold text-white group-hover:text-amber-300 transition">Cron Jobs</span>
                             <span class="text-[10px] text-slate-400 mt-0.5">অটোমেটেড শিডিউল</span>
+                        </div>
+
+                        <!-- Backup & Restore Quick Card -->
+                        <div onclick="switchCpanelTab('backup')" class="group p-4 rounded-xl bg-slate-900/60 hover:bg-teal-500/10 border border-slate-800 hover:border-teal-500/40 cursor-pointer transition flex flex-col items-center text-center">
+                            <div class="w-10 h-10 rounded-xl bg-teal-500/10 text-teal-400 group-hover:scale-110 flex items-center justify-center transition mb-2">
+                                <i data-lucide="archive" class="w-5 h-5"></i>
+                            </div>
+                            <span class="text-xs font-bold text-white group-hover:text-teal-300 transition">Backup & Restore</span>
+                            <span class="text-[10px] text-slate-400 mt-0.5">ফুল ব্যাকআপ ও রিস্টোর</span>
                         </div>
                     </div>
                 </div>
@@ -3359,7 +3374,104 @@
                 </div>
             </div>
 
-            <!-- TAB 8: SYSTEM STATS & SECURITY -->
+            <!-- TAB 8: BACKUP & RESTORE -->
+            <div id="tpanel-tab-content-backup" class="cpanel-view space-y-6 hidden">
+                <div class="glass-card rounded-2xl p-6 border border-darkborder">
+                    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+                        <div>
+                            <h3 class="text-lg font-bold text-white flex items-center gap-2">
+                                <i data-lucide="archive" class="w-5 h-5 text-teal-400"></i>
+                                <span>1-Click Website & Database Backup & Restore</span>
+                            </h3>
+                            <p class="text-xs text-slate-400 mt-1">আপনার ওয়েবসাইটের ফাইল, ডাটাবেস ও সেটিংসের নিরাপদ ব্যাকআপ তৈরি ও রিস্টোর করুন।</p>
+                        </div>
+                        <button onclick="loadBackupsList()" class="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs flex items-center gap-2 transition self-start sm:self-auto">
+                            <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>
+                            <span>রিফ্রেশ</span>
+                        </button>
+                    </div>
+
+                    <!-- 3 Instant Action Cards -->
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+                        <!-- Full Backup -->
+                        <div class="p-5 rounded-2xl bg-slate-900/60 border border-teal-500/30 hover:border-teal-500/60 transition flex flex-col justify-between">
+                            <div>
+                                <div class="w-10 h-10 rounded-xl bg-teal-500/10 text-teal-400 flex items-center justify-center mb-3">
+                                    <i data-lucide="package" class="w-5 h-5"></i>
+                                </div>
+                                <h4 class="text-sm font-bold text-white mb-1">ফুল ব্যাকআপ (Full Backup)</h4>
+                                <p class="text-[11px] text-slate-400 mb-4">public_html ফাইলসমূহ, সকল MySQL ডাটাবেস ও ইমেইল সেটিংসের সম্পূর্ণ ব্যাকআপ।</p>
+                            </div>
+                            <button onclick="triggerCreateBackup('full')" id="btn-backup-full" class="w-full py-2.5 px-4 bg-teal-600 hover:bg-teal-500 text-white text-xs font-semibold rounded-xl transition flex items-center justify-center gap-2 shadow-lg shadow-teal-600/20">
+                                <i data-lucide="download" class="w-4 h-4"></i>
+                                <span>Generate Full Backup</span>
+                            </button>
+                        </div>
+
+                        <!-- Files Only -->
+                        <div class="p-5 rounded-2xl bg-slate-900/60 border border-slate-800 hover:border-slate-700 transition flex flex-col justify-between">
+                            <div>
+                                <div class="w-10 h-10 rounded-xl bg-blue-500/10 text-blue-400 flex items-center justify-center mb-3">
+                                    <i data-lucide="folder" class="w-5 h-5"></i>
+                                </div>
+                                <h4 class="text-sm font-bold text-white mb-1">ওয়েবসাইট ফাইল (Files Only)</h4>
+                                <p class="text-[11px] text-slate-400 mb-4">শুধুমাত্র public_html ফোল্ডার এবং ওয়েবসাইটের সোর্স কোডের কম্প্রেসড ব্যাকআপ।</p>
+                            </div>
+                            <button onclick="triggerCreateBackup('files')" id="btn-backup-files" class="w-full py-2.5 px-4 bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold rounded-xl transition flex items-center justify-center gap-2 shadow-lg shadow-blue-600/20">
+                                <i data-lucide="file-archive" class="w-4 h-4"></i>
+                                <span>Backup Files Only</span>
+                            </button>
+                        </div>
+
+                        <!-- Database Only -->
+                        <div class="p-5 rounded-2xl bg-slate-900/60 border border-slate-800 hover:border-slate-700 transition flex flex-col justify-between">
+                            <div>
+                                <div class="w-10 h-10 rounded-xl bg-purple-500/10 text-purple-400 flex items-center justify-center mb-3">
+                                    <i data-lucide="database" class="w-5 h-5"></i>
+                                </div>
+                                <h4 class="text-sm font-bold text-white mb-1">ডাটাবেস ব্যাকআপ (Databases Only)</h4>
+                                <p class="text-[11px] text-slate-400 mb-4">এই ডোমেইনের সাথে যুক্ত সকল MySQL ডাটাবেসের SQL ডাম্প ব্যাকআপ।</p>
+                            </div>
+                            <button onclick="triggerCreateBackup('database')" id="btn-backup-database" class="w-full py-2.5 px-4 bg-purple-600 hover:bg-purple-500 text-white text-xs font-semibold rounded-xl transition flex items-center justify-center gap-2 shadow-lg shadow-purple-600/20">
+                                <i data-lucide="database-backup" class="w-4 h-4"></i>
+                                <span>Backup Databases Only</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Progress / Status Notice -->
+                    <div id="backup-status-banner" class="hidden mb-6 p-4 rounded-xl bg-teal-500/10 border border-teal-500/30 text-teal-300 text-xs flex items-center gap-3">
+                        <div class="w-4 h-4 border-2 border-teal-400 border-t-transparent rounded-full animate-spin"></div>
+                        <span id="backup-status-text">ব্যাকআপ তৈরি হচ্ছে... অনুগ্রহ করে অপেক্ষা করুন।</span>
+                    </div>
+
+                    <!-- Existing Backups Table -->
+                    <div>
+                        <h4 class="text-sm font-bold text-white mb-3 flex items-center gap-2">
+                            <i data-lucide="history" class="w-4 h-4 text-slate-400"></i>
+                            <span>উপলব্ধ ব্যাকআপ আর্কাইভ (Available Backups)</span>
+                        </h4>
+                        <div class="overflow-x-auto rounded-xl border border-slate-800">
+                            <table class="w-full text-left text-xs">
+                                <thead>
+                                    <tr class="bg-slate-900/80 text-slate-400 font-semibold uppercase tracking-wider text-[11px] border-b border-slate-800">
+                                        <th class="py-3 px-4">Backup Archive</th>
+                                        <th class="py-3 px-4">Type</th>
+                                        <th class="py-3 px-4">File Size</th>
+                                        <th class="py-3 px-4">Created Date</th>
+                                        <th class="py-3 px-4 text-right">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="backups-list-tbody" class="divide-y divide-slate-800 text-slate-300 font-mono">
+                                    <!-- Populated dynamically -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- TAB 9: SYSTEM STATS & SECURITY -->
             <div id="tpanel-tab-content-security" class="cpanel-view space-y-6 hidden">
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div class="glass-card rounded-2xl p-6 border border-darkborder">
@@ -5269,6 +5381,7 @@
             if (tabName === 'php') loadPhpSettings();
             if (tabName === 'domains') loadDomainsAndDns();
             if (tabName === 'cron') loadCronJobs();
+            if (tabName === 'backup') loadBackupsList();
             if (tabName === 'ssl') loadSslStatus();
             if (tabName === 'security') loadSecurityStats();
 
@@ -7716,6 +7829,174 @@
                     cancelCronEdit();
                 }
                 loadCronJobs();
+            } catch (err) {
+                showToast(err.message, 'error');
+            }
+        }
+
+        // -------------------------------------------------------------
+        // BACKUP & RESTORE LOGIC
+        // -------------------------------------------------------------
+        async function loadBackupsList() {
+            if (!selectedService) return;
+            const tbody = document.getElementById('backups-list-tbody');
+            if (!tbody) return;
+
+            tbody.innerHTML = `<tr><td colspan="5" class="py-6 text-center text-slate-500 font-sans"><div class="flex items-center justify-center gap-2"><div class="w-4 h-4 border-2 border-teal-500 border-t-transparent rounded-full animate-spin"></div><span>ব্যাকআপ লোড হচ্ছে...</span></div></td></tr>`;
+
+            try {
+                const res = await fetch(`/api/cpanel/backup/list?serviceId=${selectedService.id}`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                const data = await res.json();
+                const backups = data.backups || [];
+
+                if (backups.length === 0) {
+                    tbody.innerHTML = `<tr><td colspan="5" class="py-8 text-center text-slate-500 font-sans">এখনও কোনো ব্যাকআপ তৈরি করা হয়নি। উপরের বাটনগুলো দিয়ে সহজেই ব্যাকআপ তৈরি করুন।</td></tr>`;
+                    return;
+                }
+
+                tbody.innerHTML = backups.map(b => {
+                    const typeBadge = b.type === 'full'
+                        ? `<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-teal-500/10 text-teal-400 border border-teal-500/20">FULL</span>`
+                        : b.type === 'database'
+                        ? `<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-500/10 text-purple-400 border border-purple-500/20">DATABASE</span>`
+                        : `<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-500/10 text-blue-400 border border-blue-500/20">FILES</span>`;
+
+                    const dateFormatted = new Date(b.createdAt).toLocaleString('bn-BD', {
+                        year: 'numeric', month: 'short', day: 'numeric',
+                        hour: '2-digit', minute: '2-digit'
+                    });
+
+                    return `
+                        <tr class="hover:bg-slate-800/40 transition">
+                            <td class="py-3 px-4">
+                                <div class="flex items-center gap-2 font-mono text-white text-xs">
+                                    <i data-lucide="archive" class="w-4 h-4 text-teal-400 shrink-0"></i>
+                                    <span class="break-all">${b.filename}</span>
+                                </div>
+                            </td>
+                            <td class="py-3 px-4">${typeBadge}</td>
+                            <td class="py-3 px-4 font-bold text-slate-200">${b.sizeFormatted}</td>
+                            <td class="py-3 px-4 font-sans text-slate-400 text-[11px]">${dateFormatted}</td>
+                            <td class="py-3 px-4 text-right whitespace-nowrap">
+                                <div class="flex items-center justify-end gap-1.5 font-sans">
+                                    <button onclick="downloadBackup('${b.filename}')" class="px-2.5 py-1 rounded-lg bg-teal-500/10 hover:bg-teal-500/20 text-teal-300 border border-teal-500/20 transition flex items-center gap-1 text-xs" title="ডাউনলোড করুন">
+                                        <i data-lucide="download" class="w-3.5 h-3.5"></i>
+                                        <span>Download</span>
+                                    </button>
+                                    <button onclick="restoreBackup('${b.filename}')" class="px-2.5 py-1 rounded-lg bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border border-amber-500/20 transition flex items-center gap-1 text-xs" title="রিস্টোর করুন">
+                                        <i data-lucide="rotate-ccw" class="w-3.5 h-3.5"></i>
+                                        <span>Restore</span>
+                                    </button>
+                                    <button onclick="deleteBackup('${b.filename}')" class="p-1.5 rounded-lg hover:bg-rose-500/20 text-rose-400 transition" title="মুছে ফেলুন">
+                                        <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+                                    </button>
+                                </div>
+                            </td>
+                        </tr>
+                    `;
+                }).join('');
+
+                lucide.createIcons();
+            } catch (err) {
+                tbody.innerHTML = `<tr><td colspan="5" class="py-6 text-center text-rose-400 font-sans">ব্যাকআপ লোড করতে ব্যর্থ হয়েছে</td></tr>`;
+            }
+        }
+
+        async function triggerCreateBackup(type) {
+            if (!selectedService) return;
+            const banner = document.getElementById('backup-status-banner');
+            const statusText = document.getElementById('backup-status-text');
+            if (banner) {
+                banner.classList.remove('hidden');
+                statusText.textContent = `${type.toUpperCase()} ব্যাকআপ তৈরি হচ্ছে... অনুগ্রহ করে কিছুক্ষণ অপেক্ষা করুন।`;
+            }
+
+            try {
+                const res = await fetch('/api/cpanel/backup/create', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: JSON.stringify({ serviceId: selectedService.id, backupType: type })
+                });
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.error || 'Backup creation failed');
+
+                showToast(`ব্যাকআপ সফলভাবে তৈরি হয়েছে (${data.backup.sizeFormatted})`, 'success');
+                loadBackupsList();
+            } catch (err) {
+                showToast(err.message, 'error');
+            } finally {
+                if (banner) banner.classList.add('hidden');
+            }
+        }
+
+        function downloadBackup(filename) {
+            if (!selectedService) return;
+            const url = `/api/cpanel/backup/download?serviceId=${selectedService.id}&filename=${encodeURIComponent(filename)}`;
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+        }
+
+        async function restoreBackup(filename) {
+            if (!selectedService) return;
+            if (!confirm(`আপনি কি নিশ্চিতভাবে "${filename}" ব্যাকআপটি রিস্টোর করতে চান?\n\nসতর্কতা: বর্তমান ওয়েবসাইট ফাইল এবং সংশ্লিষ্ট ডাটাবেস এই ব্যাকআপের ডাটা দিয়ে প্রতিস্থাপিত (Overwrite) হবে!`)) {
+                return;
+            }
+
+            const banner = document.getElementById('backup-status-banner');
+            const statusText = document.getElementById('backup-status-text');
+            if (banner) {
+                banner.classList.remove('hidden');
+                statusText.textContent = `ব্যাকআপ রিস্টোর হচ্ছে... ফাইল ও ডাটাবেস আপডেট হচ্ছে, দয়া করে অপেক্ষা করুন।`;
+            }
+
+            try {
+                const res = await fetch('/api/cpanel/backup/restore', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: JSON.stringify({ serviceId: selectedService.id, filename })
+                });
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.error || 'Restore failed');
+
+                showToast('ওয়েবসাইট ও ডাটাবেস সফলভাবে রিস্টোর হয়েছে!', 'success');
+                loadBackupsList();
+            } catch (err) {
+                showToast(err.message, 'error');
+            } finally {
+                if (banner) banner.classList.add('hidden');
+            }
+        }
+
+        async function deleteBackup(filename) {
+            if (!selectedService) return;
+            if (!confirm(`আপনি কি ব্যাকআপ ফাইলটি (${filename}) মুছে ফেলতে চান?`)) return;
+
+            try {
+                const res = await fetch('/api/cpanel/backup/delete', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: JSON.stringify({ serviceId: selectedService.id, filename })
+                });
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.error || 'Delete failed');
+
+                showToast('ব্যাকআপ ফাইলটি মুছে ফেলা হয়েছে', 'info');
+                loadBackupsList();
             } catch (err) {
                 showToast(err.message, 'error');
             }
