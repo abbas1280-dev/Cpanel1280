@@ -3684,6 +3684,148 @@ async function getBackupDirectory(serviceId) {
     return dir;
 }
 
+// Core reusable backup generator with auto-retention
+async function generateServiceBackup(service, backupType = 'full', isAuto = false) {
+    const type = ['full', 'files', 'database'].includes(backupType) ? backupType : 'full';
+    const domain = service.domain;
+    const vhostPath = path.join('/var/www/vhosts', domain);
+    const now = new Date();
+    const dateStr = now.toISOString().slice(0, 10);
+    const timeStr = now.toTimeString().slice(0, 8).replace(/:/g, '');
+    const timestamp = `${dateStr}_${timeStr}`;
+
+    const backupDir = await getBackupDirectory(service.id);
+    const tempWorkDir = path.join('/tmp', `backup_tmp_${service.id}_${Date.now()}`);
+    await fsp.mkdir(tempWorkDir, { recursive: true });
+
+    const finalFilename = isAuto
+        ? `auto_backup_${domain}_${timestamp}_full.tar.gz`
+        : `backup_${domain}_${timestamp}_${type}.tar.gz`;
+    const finalFilePath = path.join(backupDir, finalFilename);
+
+    const [dbs] = await pool.query('SELECT db_name FROM databases_list WHERE service_id = ?', [service.id]);
+    const dbNames = dbs.map(d => d.db_name);
+
+    if (type === 'files') {
+        const items = [];
+        if (fs.existsSync(path.join(vhostPath, 'public_html'))) items.push('public_html');
+        if (fs.existsSync(path.join(vhostPath, 'subdomains'))) items.push('subdomains');
+        if (items.length === 0) {
+            await fsp.mkdir(path.join(vhostPath, 'public_html'), { recursive: true });
+            items.push('public_html');
+        }
+        await execPromise(`tar -czf "${finalFilePath}" -C "${vhostPath}" ${items.join(' ')}`);
+    } else if (type === 'database') {
+        const dbDir = path.join(tempWorkDir, 'databases');
+        await fsp.mkdir(dbDir, { recursive: true });
+
+        for (const dbName of dbNames) {
+            const dumpFile = path.join(dbDir, `${dbName}.sql`);
+            try {
+                await execPromise(`mysqldump -u root "${dbName}" > "${dumpFile}"`);
+            } catch (dumpErr) {
+                console.error(`Dump failed for ${dbName}:`, dumpErr.message);
+            }
+        }
+
+        const metadata = {
+            serviceId: service.id,
+            domain: service.domain,
+            backupType: 'database',
+            isAuto,
+            createdAt: now.toISOString(),
+            databases: dbNames,
+            platform: 'Cpanel1280-Enterprise'
+        };
+        await fsp.writeFile(path.join(tempWorkDir, 'cpanel_metadata.json'), JSON.stringify(metadata, null, 2), 'utf8');
+        await execPromise(`tar -czf "${finalFilePath}" -C "${tempWorkDir}" .`);
+    } else { // type === 'full'
+        // 1. Homedir with public_html and subdomains
+        const homedir = path.join(tempWorkDir, 'homedir');
+        await fsp.mkdir(homedir, { recursive: true });
+        if (fs.existsSync(path.join(vhostPath, 'public_html'))) {
+            await execPromise(`cp -a "${path.join(vhostPath, 'public_html')}" "${homedir}/"`);
+        }
+        if (fs.existsSync(path.join(vhostPath, 'subdomains'))) {
+            await execPromise(`cp -a "${path.join(vhostPath, 'subdomains')}" "${homedir}/"`);
+        }
+
+        // 2. Databases
+        const dbDir = path.join(tempWorkDir, 'databases');
+        await fsp.mkdir(dbDir, { recursive: true });
+        for (const dbName of dbNames) {
+            const dumpFile = path.join(dbDir, `${dbName}.sql`);
+            try {
+                await execPromise(`mysqldump -u root "${dbName}" > "${dumpFile}"`);
+            } catch (dumpErr) {
+                console.error(`Dump failed for ${dbName}:`, dumpErr.message);
+            }
+        }
+
+        // 3. Metadata
+        const [emails] = await pool.query('SELECT email_user, full_email, quota_mb FROM email_accounts WHERE service_id = ?', [service.id]);
+        const [crons] = await pool.query('SELECT schedule, command FROM cron_jobs WHERE service_id = ?', [service.id]);
+        const [subs] = await pool.query('SELECT subdomain, doc_root, php_version FROM subdomains WHERE service_id = ?', [service.id]);
+
+        const metadata = {
+            serviceId: service.id,
+            domain: service.domain,
+            phpVersion: service.php_version,
+            backupType: 'full',
+            isAuto,
+            createdAt: now.toISOString(),
+            databases: dbNames,
+            subdomains: subs,
+            emailAccounts: emails,
+            cronJobs: crons,
+            platform: 'Cpanel1280-Enterprise'
+        };
+        await fsp.writeFile(path.join(tempWorkDir, 'cpanel_metadata.json'), JSON.stringify(metadata, null, 2), 'utf8');
+
+        // 4. Create master archive
+        await execPromise(`tar -czf "${finalFilePath}" -C "${tempWorkDir}" .`);
+    }
+
+    // Clean up temp dir
+    await fsp.rm(tempWorkDir, { recursive: true, force: true }).catch(() => {});
+
+    // Retention policy for auto backups: keep latest 3 auto backups per domain
+    let prunedCount = 0;
+    if (isAuto) {
+        try {
+            const allFiles = await fsp.readdir(backupDir);
+            const autoFiles = [];
+            for (const f of allFiles) {
+                if (f.startsWith(`auto_backup_${domain}_`)) {
+                    const st = await fsp.stat(path.join(backupDir, f));
+                    autoFiles.push({ name: f, mtime: st.mtime });
+                }
+            }
+            autoFiles.sort((a, b) => b.mtime - a.mtime);
+            if (autoFiles.length > 3) {
+                const toPrune = autoFiles.slice(3);
+                for (const old of toPrune) {
+                    await fsp.unlink(path.join(backupDir, old.name)).catch(() => {});
+                    prunedCount++;
+                }
+            }
+        } catch (pruneErr) {
+            console.error('Retention prune error:', pruneErr.message);
+        }
+    }
+
+    const stat = await fsp.stat(finalFilePath);
+    return {
+        filename: finalFilename,
+        type: isAuto ? 'auto' : type,
+        isAuto,
+        sizeBytes: stat.size,
+        sizeFormatted: formatBytes(stat.size),
+        createdAt: stat.mtime,
+        prunedCount
+    };
+}
+
 // 1. List Backups
 app.get('/api/cpanel/backup/list', authMiddleware, async (req, res) => {
     try {
@@ -3700,13 +3842,16 @@ app.get('/api/cpanel/backup/list', authMiddleware, async (req, res) => {
             const fullPath = path.join(backupDir, file);
             const stat = await fsp.stat(fullPath);
 
+            const isAuto = file.startsWith('auto_backup_') || file.includes('_auto_');
             let type = 'full';
-            if (file.includes('_files')) type = 'files';
+            if (isAuto) type = 'auto';
+            else if (file.includes('_files')) type = 'files';
             else if (file.includes('_database')) type = 'database';
 
             backups.push({
                 filename: file,
                 type,
+                isAuto,
                 sizeBytes: stat.size,
                 sizeFormatted: formatBytes(stat.size),
                 createdAt: stat.mtime
@@ -3714,7 +3859,14 @@ app.get('/api/cpanel/backup/list', authMiddleware, async (req, res) => {
         }
 
         backups.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-        res.json({ backups });
+
+        const todayDate = new Date().toISOString().slice(0, 10);
+        const todayAutoBackup = backups.find(b => b.isAuto && b.filename.includes(todayDate));
+
+        res.json({
+            backups,
+            todayAutoBackup: todayAutoBackup || null
+        });
     } catch (err) {
         res.status(500).json({ error: 'Failed to list backups: ' + err.message });
     }
@@ -3724,121 +3876,15 @@ app.get('/api/cpanel/backup/list', authMiddleware, async (req, res) => {
 app.post('/api/cpanel/backup/create', authMiddleware, async (req, res) => {
     try {
         const { serviceId, backupType } = req.body;
-        const type = ['full', 'files', 'database'].includes(backupType) ? backupType : 'full';
         const service = await getServiceForUser(serviceId, req.user);
         if (!service) return res.status(404).json({ error: 'Service not found' });
 
-        const domain = service.domain;
-        const vhostPath = path.join('/var/www/vhosts', domain);
-        const now = new Date();
-        const dateStr = now.toISOString().slice(0, 10);
-        const timeStr = now.toTimeString().slice(0, 8).replace(/:/g, '');
-        const timestamp = `${dateStr}_${timeStr}`;
-
-        const backupDir = await getBackupDirectory(service.id);
-        const tempWorkDir = path.join('/tmp', `backup_tmp_${service.id}_${Date.now()}`);
-        await fsp.mkdir(tempWorkDir, { recursive: true });
-
-        const finalFilename = `backup_${domain}_${timestamp}_${type}.tar.gz`;
-        const finalFilePath = path.join(backupDir, finalFilename);
-
-        const [dbs] = await pool.query('SELECT db_name FROM databases_list WHERE service_id = ?', [service.id]);
-        const dbNames = dbs.map(d => d.db_name);
-
-        if (type === 'files') {
-            // Include public_html and subdomains directly (NO double nested archive!)
-            const items = [];
-            if (fs.existsSync(path.join(vhostPath, 'public_html'))) items.push('public_html');
-            if (fs.existsSync(path.join(vhostPath, 'subdomains'))) items.push('subdomains');
-            if (items.length === 0) {
-                await fsp.mkdir(path.join(vhostPath, 'public_html'), { recursive: true });
-                items.push('public_html');
-            }
-            await execPromise(`tar -czf "${finalFilePath}" -C "${vhostPath}" ${items.join(' ')}`);
-        } else if (type === 'database') {
-            const dbDir = path.join(tempWorkDir, 'databases');
-            await fsp.mkdir(dbDir, { recursive: true });
-
-            for (const dbName of dbNames) {
-                const dumpFile = path.join(dbDir, `${dbName}.sql`);
-                try {
-                    await execPromise(`mysqldump -u root "${dbName}" > "${dumpFile}"`);
-                } catch (dumpErr) {
-                    console.error(`Dump failed for ${dbName}:`, dumpErr.message);
-                }
-            }
-
-            const metadata = {
-                serviceId: service.id,
-                domain: service.domain,
-                backupType: 'database',
-                createdAt: now.toISOString(),
-                databases: dbNames,
-                platform: 'Cpanel1280-Enterprise'
-            };
-            await fsp.writeFile(path.join(tempWorkDir, 'cpanel_metadata.json'), JSON.stringify(metadata, null, 2), 'utf8');
-            await execPromise(`tar -czf "${finalFilePath}" -C "${tempWorkDir}" .`);
-        } else { // type === 'full'
-            // 1. Homedir with public_html and subdomains
-            const homedir = path.join(tempWorkDir, 'homedir');
-            await fsp.mkdir(homedir, { recursive: true });
-            if (fs.existsSync(path.join(vhostPath, 'public_html'))) {
-                await execPromise(`cp -a "${path.join(vhostPath, 'public_html')}" "${homedir}/"`);
-            }
-            if (fs.existsSync(path.join(vhostPath, 'subdomains'))) {
-                await execPromise(`cp -a "${path.join(vhostPath, 'subdomains')}" "${homedir}/"`);
-            }
-
-            // 2. Databases
-            const dbDir = path.join(tempWorkDir, 'databases');
-            await fsp.mkdir(dbDir, { recursive: true });
-            for (const dbName of dbNames) {
-                const dumpFile = path.join(dbDir, `${dbName}.sql`);
-                try {
-                    await execPromise(`mysqldump -u root "${dbName}" > "${dumpFile}"`);
-                } catch (dumpErr) {
-                    console.error(`Dump failed for ${dbName}:`, dumpErr.message);
-                }
-            }
-
-            // 3. Metadata
-            const [emails] = await pool.query('SELECT email_user, full_email, quota_mb FROM email_accounts WHERE service_id = ?', [service.id]);
-            const [crons] = await pool.query('SELECT schedule, command FROM cron_jobs WHERE service_id = ?', [service.id]);
-            const [subs] = await pool.query('SELECT subdomain, doc_root, php_version FROM subdomains WHERE service_id = ?', [service.id]);
-
-            const metadata = {
-                serviceId: service.id,
-                domain: service.domain,
-                phpVersion: service.php_version,
-                backupType: 'full',
-                createdAt: now.toISOString(),
-                databases: dbNames,
-                subdomains: subs,
-                emailAccounts: emails,
-                cronJobs: crons,
-                platform: 'Cpanel1280-Enterprise'
-            };
-            await fsp.writeFile(path.join(tempWorkDir, 'cpanel_metadata.json'), JSON.stringify(metadata, null, 2), 'utf8');
-
-            // 4. Create master archive
-            await execPromise(`tar -czf "${finalFilePath}" -C "${tempWorkDir}" .`);
-        }
-
-        // Clean up temp dir
-        await fsp.rm(tempWorkDir, { recursive: true, force: true }).catch(() => {});
-
-        const stat = await fsp.stat(finalFilePath);
+        const backup = await generateServiceBackup(service, backupType, false);
 
         res.json({
             success: true,
-            message: `Backup created successfully (ব্যাকআপ সফলভাবে তৈরি হয়েছে - ${formatBytes(stat.size)})`,
-            backup: {
-                filename: finalFilename,
-                type,
-                sizeBytes: stat.size,
-                sizeFormatted: formatBytes(stat.size),
-                createdAt: stat.mtime
-            }
+            message: `ব্যাকআপ সফলভাবে তৈরি হয়েছে (${backup.sizeFormatted})`,
+            backup
         });
     } catch (err) {
         res.status(500).json({ error: 'Failed to create backup: ' + err.message });
@@ -3952,7 +3998,7 @@ app.post('/api/cpanel/backup/restore', authMiddleware, async (req, res) => {
     }
 });
 
-// 5. Delete Backup
+// 5. Delete Backup (Permanent removal from disk)
 app.post('/api/cpanel/backup/delete', authMiddleware, async (req, res) => {
     try {
         const { serviceId, filename } = req.body;
@@ -3963,15 +4009,113 @@ app.post('/api/cpanel/backup/delete', authMiddleware, async (req, res) => {
         const backupDir = await getBackupDirectory(service.id);
         const filePath = path.join(backupDir, safeFilename);
 
+        let freedBytes = 0;
         if (fs.existsSync(filePath)) {
+            const stat = await fsp.stat(filePath);
+            freedBytes = stat.size;
             await fsp.unlink(filePath);
         }
 
-        res.json({ success: true, message: 'Backup file deleted (ব্যাকআপ মুছে ফেলা হয়েছে)' });
+        // Also clean up any lingering orphan temp folders
+        try {
+            await execPromise(`rm -rf /tmp/backup_tmp_${service.id}_* /tmp/restore_tmp_${service.id}_*`);
+        } catch (e) {}
+
+        res.json({
+            success: true,
+            freedBytes,
+            freedFormatted: formatBytes(freedBytes),
+            message: `ব্যাকআপ ফাইলটি সার্ভারের ডিস্ক থেকে স্থায়ীভাবে মুছে ফেলা হয়েছে (${formatBytes(freedBytes)} স্টোরেজ খালি হয়েছে)`
+        });
     } catch (err) {
         res.status(500).json({ error: 'Delete failed: ' + err.message });
     }
 });
+
+// 6. Delete All Backups (Bulk cleanup to release all backup disk space)
+app.post('/api/cpanel/backup/delete-all', authMiddleware, async (req, res) => {
+    try {
+        const { serviceId } = req.body;
+        const service = await getServiceForUser(serviceId, req.user);
+        if (!service) return res.status(404).json({ error: 'Service not found' });
+
+        const backupDir = await getBackupDirectory(service.id);
+        const files = await fsp.readdir(backupDir);
+        let deletedCount = 0;
+        let totalFreed = 0;
+
+        for (const file of files) {
+            if (file.endsWith('.tar.gz') || file.endsWith('.zip')) {
+                const fullPath = path.join(backupDir, file);
+                try {
+                    const st = await fsp.stat(fullPath);
+                    totalFreed += st.size;
+                    await fsp.unlink(fullPath);
+                    deletedCount++;
+                } catch (e) {}
+            }
+        }
+
+        try {
+            await execPromise(`rm -rf /tmp/backup_tmp_${service.id}_* /tmp/restore_tmp_${service.id}_*`);
+        } catch (e) {}
+
+        res.json({
+            success: true,
+            deletedCount,
+            totalFreed,
+            freedFormatted: formatBytes(totalFreed),
+            message: `সকল ব্যাকআপ সফলভাবে মুছে ফেলা হয়েছে (${deletedCount} টি ফাইল, ${formatBytes(totalFreed)} ডিস্ক স্পেস খালি হয়েছে)`
+        });
+    } catch (err) {
+        res.status(500).json({ error: 'Delete all failed: ' + err.message });
+    }
+});
+
+// 7. Auto Daily Backup Trigger (Instant button trigger)
+app.post('/api/cpanel/backup/auto-run', authMiddleware, async (req, res) => {
+    try {
+        const { serviceId } = req.body;
+        const service = await getServiceForUser(serviceId, req.user);
+        if (!service) return res.status(404).json({ error: 'Service not found' });
+
+        const backupResult = await generateServiceBackup(service, 'full', true);
+
+        res.json({
+            success: true,
+            message: `আজকের স্বয়ংক্রিয় দৈনিক ব্যাকআপ সফলভাবে তৈরি হয়েছে (${backupResult.sizeFormatted})`,
+            backup: backupResult
+        });
+    } catch (err) {
+        res.status(500).json({ error: 'Auto backup failed: ' + err.message });
+    }
+});
+
+// Daily Auto-Backup Background Worker (Runs checks every 30 minutes)
+setInterval(async () => {
+    try {
+        const now = new Date();
+        const dateStr = now.toISOString().slice(0, 10);
+        const [services] = await pool.query('SELECT * FROM services WHERE status = "active"');
+        for (const svc of services) {
+            try {
+                const bDir = path.join(BACKUP_BASE_DIR, String(svc.id));
+                if (!fs.existsSync(bDir)) continue;
+                const files = await fsp.readdir(bDir);
+                const hasTodayAuto = files.some(f => f.startsWith(`auto_backup_${svc.domain}_${dateStr}`));
+                if (!hasTodayAuto) {
+                    console.log(`[AutoBackup] Running automated daily backup for ${svc.domain} (Service ${svc.id})...`);
+                    await generateServiceBackup(svc, 'full', true);
+                    console.log(`[AutoBackup] Automated daily backup completed for ${svc.domain}`);
+                }
+            } catch (svcErr) {
+                console.error(`[AutoBackup] Failed for ${svc.domain}:`, svcErr.message);
+            }
+        }
+    } catch (bgErr) {
+        console.error('[AutoBackup] Interval check failed:', bgErr.message);
+    }
+}, 30 * 60 * 1000);
 
 
 // Auto-detect first-time visit: if not installed, redirect browser to /install-wizard

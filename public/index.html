@@ -3383,12 +3383,40 @@
                                 <i data-lucide="archive" class="w-5 h-5 text-teal-400"></i>
                                 <span>1-Click Website & Database Backup & Restore</span>
                             </h3>
-                            <p class="text-xs text-slate-400 mt-1">আপনার ওয়েবসাইটের ফাইল, ডাটাবেস ও সেটিংসের নিরাপদ ব্যাকআপ তৈরি ও রিস্টোর করুন।</p>
+                            <p class="text-xs text-slate-400 mt-1">আপনার ওয়েবসাইটের ফাইল, ডাটাবেস ও সেটিংসের নিরাপদ ব্যাকআপ তৈরি, অটো ব্যাকআপ ও রিস্টোর করুন।</p>
                         </div>
-                        <button onclick="loadBackupsList()" class="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs flex items-center gap-2 transition self-start sm:self-auto">
-                            <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>
-                            <span>রিফ্রেশ</span>
-                        </button>
+                        <div class="flex items-center gap-2 self-start sm:self-auto">
+                            <button onclick="loadBackupsList()" class="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs flex items-center gap-1.5 transition">
+                                <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>
+                                <span>রিফ্রেশ</span>
+                            </button>
+                            <button onclick="deleteAllBackups()" class="px-3.5 py-2 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/30 rounded-xl text-xs flex items-center gap-1.5 transition" title="সার্ভারের ডিস্ক থেকে সকল ব্যাকআপ স্থায়ীভাবে মুছে স্টোরেজ খালি করুন">
+                                <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+                                <span>সব ব্যাকআপ মুছুন</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Auto Daily Backup Card -->
+                    <div class="mb-6 p-5 rounded-2xl bg-gradient-to-r from-teal-950/40 via-slate-900/60 to-slate-900/60 border border-teal-500/30 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                        <div class="flex items-start gap-3">
+                            <div class="w-10 h-10 rounded-xl bg-teal-500/20 text-teal-400 flex items-center justify-center shrink-0 mt-0.5">
+                                <i data-lucide="shield-check" class="w-5 h-5"></i>
+                            </div>
+                            <div>
+                                <div class="flex items-center gap-2">
+                                    <h4 class="text-sm font-bold text-white">স্বয়ংক্রিয় দৈনিক ব্যাকআপ (Auto Daily Backup)</h4>
+                                    <span id="auto-backup-status-pill" class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-800 text-slate-400 border border-slate-700">চেক করা হচ্ছে...</span>
+                                </div>
+                                <p class="text-xs text-slate-400 mt-1">প্রতিদিন রাত ১২টায় অটোমেটিক ফুল ব্যাকআপ তৈরি হয়। স্টোরেজ সুরক্ষিত রাখতে স্বয়ংক্রিয়ভাবে বিগত ৩ দিনের ব্যাকআপ সংরক্ষিত থাকে।</p>
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-3 shrink-0">
+                            <button onclick="triggerAutoBackupNow()" id="btn-auto-backup-now" class="px-4 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-semibold rounded-xl transition flex items-center gap-2 shadow-lg shadow-teal-900/30">
+                                <i data-lucide="zap" class="w-4 h-4"></i>
+                                <span>⚡ Run Auto Backup Now</span>
+                            </button>
+                        </div>
                     </div>
 
                     <!-- 3 Instant Action Cards -->
@@ -7851,13 +7879,26 @@
                 const data = await res.json();
                 const backups = data.backups || [];
 
+                const todayStatusPill = document.getElementById('auto-backup-status-pill');
+                if (todayStatusPill) {
+                    if (data.todayAutoBackup) {
+                        todayStatusPill.className = 'px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 flex items-center gap-1';
+                        todayStatusPill.innerHTML = `✓ আজকের ব্যাকআপ সম্পন্ন (${data.todayAutoBackup.sizeFormatted || ''})`;
+                    } else {
+                        todayStatusPill.className = 'px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/10 text-amber-400 border border-amber-500/20 flex items-center gap-1';
+                        todayStatusPill.innerHTML = `আজকের ব্যাকআপ প্রস্তুত নয় (ক্লিক করে রান করুন)`;
+                    }
+                }
+
                 if (backups.length === 0) {
                     tbody.innerHTML = `<tr><td colspan="5" class="py-8 text-center text-slate-500 font-sans">এখনও কোনো ব্যাকআপ তৈরি করা হয়নি। উপরের বাটনগুলো দিয়ে সহজেই ব্যাকআপ তৈরি করুন।</td></tr>`;
                     return;
                 }
 
                 tbody.innerHTML = backups.map(b => {
-                    const typeBadge = b.type === 'full'
+                    const typeBadge = (b.isAuto || b.type === 'auto')
+                        ? `<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 inline-flex items-center gap-1">AUTO DAILY</span>`
+                        : b.type === 'full'
                         ? `<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-teal-500/10 text-teal-400 border border-teal-500/20">FULL</span>`
                         : b.type === 'database'
                         ? `<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-500/10 text-purple-400 border border-purple-500/20">DATABASE</span>`
@@ -7902,7 +7943,7 @@
                                         <i data-lucide="rotate-ccw" class="w-3.5 h-3.5"></i>
                                         <span>Restore</span>
                                     </button>
-                                    <button onclick="deleteBackup('${b.filename}')" class="p-1.5 rounded-lg hover:bg-rose-500/20 text-rose-400 transition" title="মুছে ফেলুন">
+                                    <button onclick="deleteBackup('${b.filename}')" class="p-1.5 rounded-lg hover:bg-rose-500/20 text-rose-400 transition" title="সার্ভার থেকে স্থায়ীভাবে মুছে ফেলুন">
                                         <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
                                     </button>
                                 </div>
@@ -7944,6 +7985,72 @@
                 showToast(err.message, 'error');
             } finally {
                 if (banner) banner.classList.add('hidden');
+            }
+        }
+
+        async function triggerAutoBackupNow() {
+            if (!selectedService) return;
+            const btn = document.getElementById('btn-auto-backup-now');
+            const originalText = btn ? btn.innerHTML : '';
+            if (btn) {
+                btn.disabled = true;
+                btn.innerHTML = `<div class="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin"></div><span>অটো ব্যাকআপ তৈরি হচ্ছে...</span>`;
+            }
+
+            const banner = document.getElementById('backup-status-banner');
+            const statusText = document.getElementById('backup-status-text');
+            if (banner) {
+                banner.classList.remove('hidden');
+                statusText.textContent = `আজকের দৈনিক স্বয়ংক্রিয় ফুল ব্যাকআপ তৈরি হচ্ছে... অনুগ্রহ করে কিছুক্ষণ অপেক্ষা করুন।`;
+            }
+
+            try {
+                const res = await fetch('/api/cpanel/backup/auto-run', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: JSON.stringify({ serviceId: selectedService.id })
+                });
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.error || 'Auto backup creation failed');
+
+                showToast(`দৈনিক ব্যাকআপ সফলভাবে তৈরি হয়েছে (${data.backup.sizeFormatted})`, 'success');
+                await loadBackupsList();
+            } catch (err) {
+                showToast(err.message, 'error');
+            } finally {
+                if (btn) {
+                    btn.disabled = false;
+                    btn.innerHTML = originalText;
+                }
+                if (banner) banner.classList.add('hidden');
+            }
+        }
+
+        async function deleteAllBackups() {
+            if (!selectedService) return;
+            if (!confirm(`আপনি কি সার্ভারের ডিস্ক থেকে এই ডোমেইনের সকল ব্যাকআপ ফাইল স্থায়ীভাবে মুছে ফেলতে চান?\n\nসতর্কতা: এটি সার্ভার থেকে সম্পূর্ণ ব্যাকআপ ফাইল মুছে দেবে এবং আপনার হোস্টিং ডিস্ক স্পেস সম্পূর্ণ খালি করবে। এই অ্যাকশনটি অপরিবর্তনীয়!`)) {
+                return;
+            }
+
+            try {
+                const res = await fetch('/api/cpanel/backup/delete-all', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: JSON.stringify({ serviceId: selectedService.id })
+                });
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.error || 'Delete all failed');
+
+                showToast(data.message || 'সকল ব্যাকআপ স্থায়ীভাবে মুছে ফেলা হয়েছে', 'success');
+                loadBackupsList();
+            } catch (err) {
+                showToast(err.message, 'error');
             }
         }
 
@@ -7995,7 +8102,7 @@
 
         async function deleteBackup(filename) {
             if (!selectedService) return;
-            if (!confirm(`আপনি কি ব্যাকআপ ফাইলটি (${filename}) মুছে ফেলতে চান?`)) return;
+            if (!confirm(`আপনি কি নিশ্চিতভাবে "${filename}" ব্যাকআপ ফাইলটি সার্ভারের ডিস্ক থেকে চিরতরে মুছে ফেলতে চান?\n\nএটি সার্ভারের স্টোরেজ থেকে ফাইলটি সম্পূর্ণভাবে রিমুভ করে ডিস্ক স্পেস খালি করবে।`)) return;
 
             try {
                 const res = await fetch('/api/cpanel/backup/delete', {
@@ -8009,7 +8116,7 @@
                 const data = await res.json();
                 if (!res.ok) throw new Error(data.error || 'Delete failed');
 
-                showToast('ব্যাকআপ ফাইলটি মুছে ফেলা হয়েছে', 'info');
+                showToast(data.message || 'ব্যাকআপ ফাইলটি সার্ভারের ডিস্ক থেকে স্থায়ীভাবে মুছে ফেলা হয়েছে', 'info');
                 loadBackupsList();
             } catch (err) {
                 showToast(err.message, 'error');
