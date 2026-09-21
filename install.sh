@@ -44,15 +44,29 @@ apt-get install -y -q \
 
 # 4. Install Nginx Web Server
 echo "🌐 Installing Nginx Web Server..."
-apt-get install -y -q nginx
-systemctl enable nginx
-systemctl start nginx
+systemctl stop apache2 2>/dev/null || true
+systemctl disable apache2 2>/dev/null || true
+
+if [ ! -f /etc/nginx/nginx.conf ]; then
+    echo "🔄 Restoring Nginx base configurations..."
+    apt-get install --reinstall -o Dpkg::Options::="--force-confmiss" -y -q nginx nginx-common 2>/dev/null || true
+else
+    apt-get install -y -q nginx 2>/dev/null || true
+fi
+mkdir -p /etc/nginx/sites-available /etc/nginx/sites-enabled /etc/nginx/conf.d
+systemctl enable nginx 2>/dev/null || true
+systemctl start nginx 2>/dev/null || true
 
 # 5. Install MariaDB Database Server
 echo "🗄️ Installing MariaDB Database Engine..."
-apt-get install -y -q mariadb-server mariadb-client
-systemctl enable mariadb
-systemctl start mariadb
+if [ ! -d /etc/mysql ]; then
+    echo "🔄 Restoring MariaDB base configurations..."
+    apt-get install --reinstall -o Dpkg::Options::="--force-confmiss" -y -q mariadb-server mariadb-client 2>/dev/null || true
+else
+    apt-get install -y -q mariadb-server mariadb-client 2>/dev/null || true
+fi
+systemctl enable mariadb 2>/dev/null || true
+systemctl start mariadb 2>/dev/null || true
 
 # 6. Install Node.js LTS (v20)
 if ! command -v node >/dev/null 2>&1 || [ "$(node -v | cut -d'.' -f1 | tr -d 'v')" -lt 18 ]; then
@@ -179,7 +193,8 @@ fi
 
 if [ -f "${SCRIPT_DIR}/configs/nginx/cpanel-nginx.conf" ]; then
     cp -f "${SCRIPT_DIR}/configs/nginx/cpanel-nginx.conf" /etc/nginx/sites-available/default
-    nginx -t && systemctl restart nginx
+    ln -sf /etc/nginx/sites-available/default /etc/nginx/sites-enabled/default
+    nginx -t && (systemctl restart nginx || systemctl reload nginx) 2>/dev/null || true
 fi
 
 # Restart Mail Services
